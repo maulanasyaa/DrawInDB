@@ -7,6 +7,11 @@ export const useVaultStore = create((set, get) => ({
   error: null,
 
   loadRecentVaults: async () => {
+    if (!window.api) {
+      console.warn("window.api not found. Running in browser mode?");
+      return;
+    }
+
     try {
       const paths = await window.api.getRecentVaults();
       const recentVaults = paths.map(p => ({
@@ -24,7 +29,7 @@ export const useVaultStore = create((set, get) => ({
     try {
       const configPath = await window.api.pathJoin(folderPath, '.drawindb', 'config.json');
       const exists = await window.api.pathExists(configPath);
-      
+
       if (!exists) {
         throw new Error('Not a valid DrawInDB vault. Missing .drawindb/config.json');
       }
@@ -34,7 +39,7 @@ export const useVaultStore = create((set, get) => ({
 
       const diagramsPath = await window.api.pathJoin(folderPath, 'diagrams');
       const files = await window.api.listFiles(diagramsPath);
-      
+
       const diagrams = [];
       for (const file of files) {
         if (!file.isDirectory && file.name.endsWith('.json')) {
@@ -59,13 +64,13 @@ export const useVaultStore = create((set, get) => ({
 
       await window.api.saveRecentVault(folderPath);
 
-      set({ 
-        currentVault: { 
-          path: folderPath, 
+      set({
+        currentVault: {
+          path: folderPath,
           name: config.vault_name || folderPath.split(/[/\\]/).pop(),
-          diagrams 
+          diagrams
         },
-        isLoading: false 
+        isLoading: false
       });
 
       get().loadRecentVaults(); // Reload recent vaults
@@ -79,7 +84,7 @@ export const useVaultStore = create((set, get) => ({
     try {
       const drawindbPath = await window.api.pathJoin(folderPath, '.drawindb');
       const diagramsPath = await window.api.pathJoin(folderPath, 'diagrams');
-      
+
       const exists = await window.api.pathExists(drawindbPath);
       if (exists) {
         throw new Error('Vault already exists in this directory.');
@@ -100,13 +105,13 @@ export const useVaultStore = create((set, get) => ({
 
       await window.api.saveRecentVault(folderPath);
 
-      set({ 
-        currentVault: { 
-          path: folderPath, 
+      set({
+        currentVault: {
+          path: folderPath,
           name: vaultName,
-          diagrams: [] 
+          diagrams: []
         },
-        isLoading: false 
+        isLoading: false
       });
 
       get().loadRecentVaults();
@@ -128,11 +133,11 @@ export const useVaultStore = create((set, get) => ({
       const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       let filename = `${safeName}.json`;
       let counter = 1;
-      
+
       // Ensure unique filename
       const diagramsPath = await window.api.pathJoin(currentVault.path, 'diagrams');
       let filePath = await window.api.pathJoin(diagramsPath, filename);
-      
+
       while (await window.api.pathExists(filePath)) {
         filename = `${safeName}_${counter}.json`;
         filePath = await window.api.pathJoin(diagramsPath, filename);
@@ -169,7 +174,7 @@ export const useVaultStore = create((set, get) => ({
         currentVault: { ...currentVault, diagrams: updatedDiagrams },
         isLoading: false
       });
-      
+
       return filename;
     } catch (error) {
       set({ error: error.message, isLoading: false });
@@ -180,7 +185,7 @@ export const useVaultStore = create((set, get) => ({
   deleteDiagram: async (filename) => {
     const { currentVault } = get();
     if (!currentVault) return;
-    
+
     set({ isLoading: true, error: null });
     try {
       const filePath = await window.api.pathJoin(currentVault.path, 'diagrams', filename);
@@ -203,17 +208,17 @@ export const useVaultStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const filePath = await window.api.pathJoin(currentVault.path, 'diagrams', filename);
-      
-      // We don't rename the file itself currently, just the meta.name inside it, 
+
+      // We don't rename the file itself currently, just the meta.name inside it,
       // but if the requirement implies renaming the file too we should.
-      // Wait, "renameDiagram(filename, newName)" -> let's just update the meta.name for simplicity, 
+      // Wait, "renameDiagram(filename, newName)" -> let's just update the meta.name for simplicity,
       // or change the filename too? Let's just update the JSON meta.name, that's safer and less prone to broken links.
       const content = await window.api.readFile(filePath);
       const diagramData = JSON.parse(content);
-      
+
       diagramData.meta.name = newName;
       diagramData.meta.updated_at = new Date().toISOString();
-      
+
       await window.api.writeFile(filePath, JSON.stringify(diagramData, null, 2));
 
       const updatedDiagrams = currentVault.diagrams.map(d => {

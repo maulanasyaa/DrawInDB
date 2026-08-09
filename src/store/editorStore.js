@@ -2,20 +2,21 @@ import { create } from 'zustand';
 import { applyNodeChanges, applyEdgeChanges, addEdge } from 'reactflow';
 import { useVaultStore } from './vaultStore';
 
+let saveTimeoutId = null;
+
 export const useEditorStore = create((set, get) => ({
   diagramMeta: null,
   tables: [],
   relationships: [],
   canvasState: { zoom: 1, pan: { x: 0, y: 0 } },
-  
+
   selectedTableId: null,
   isSidebarOpen: true,
   isDirty: false,
   isLoading: true,
-  
+
   _vaultPath: null,
   _filename: null,
-  _saveTimeout: null,
 
   loadDiagram: async (vaultPath, filename) => {
     set({ isLoading: true, _vaultPath: vaultPath, _filename: filename });
@@ -45,9 +46,9 @@ export const useEditorStore = create((set, get) => ({
 
     try {
       const filePath = await window.api.pathJoin(_vaultPath, 'diagrams', _filename);
-      
+
       const updatedMeta = { ...diagramMeta, updated_at: new Date().toISOString() };
-      
+
       const fileData = {
         version: "1.0",
         meta: updatedMeta,
@@ -58,16 +59,16 @@ export const useEditorStore = create((set, get) => ({
       };
 
       await window.api.writeFile(filePath, JSON.stringify(fileData, null, 2));
-      
+
       // ONLY update isDirty to minimize re-renders. Avoid modifying diagramMeta inline if it's subscribed to by many components.
       // We do need to keep the state's meta updated for the NEXT save though, but we can just do it silently or as a single patch.
       set({ isDirty: false, diagramMeta: updatedMeta });
-      
+
       // Update vaultStore silently if possible, or wait until reload. The list is only shown on Home.
       // For now, doing it here is fine as long as Editor.jsx does not subscribe to the whole currentVault.
       const vaultStore = useVaultStore.getState();
       if (vaultStore.currentVault) {
-        const updatedDiagrams = vaultStore.currentVault.diagrams.map(d => 
+        const updatedDiagrams = vaultStore.currentVault.diagrams.map(d =>
           d.filename === _filename ? { ...d, updated_at: updatedMeta.updated_at } : d
         );
         useVaultStore.setState({
@@ -80,15 +81,15 @@ export const useEditorStore = create((set, get) => ({
   },
 
   autoSave: () => {
-    const { _saveTimeout, saveDiagram } = get();
-    if (_saveTimeout) clearTimeout(_saveTimeout);
-    
-    const timeout = setTimeout(() => {
-      // Don't use get().saveDiagram(), access it cleanly
+    const { saveDiagram } = get();
+
+    if (saveTimeoutId) clearTimeout(saveTimeoutId);
+
+    saveTimeoutId = setTimeout(() => {
       useEditorStore.getState().saveDiagram();
     }, 1500);
 
-    set({ _saveTimeout: timeout, isDirty: true });
+    set({ isDirty: true });
   },
 
   // React Flow generic handlers
@@ -112,9 +113,9 @@ export const useEditorStore = create((set, get) => ({
     const { tables } = get();
     const sourceTable = tables.find(t => t.id === connection.source);
     const sourceCol = sourceTable?.data.columns.find(c => c.id === connection.sourceHandle);
-    
-    const edge = { 
-      ...connection, 
+
+    const edge = {
+      ...connection,
       id: `edge-${Date.now()}`,
       label: `fk_${sourceTable?.data.name}_${sourceCol?.name}`,
       type: 'smoothstep',
@@ -254,7 +255,7 @@ export const useEditorStore = create((set, get) => ({
     set((state) => {
       // Also remove relationships tied to this column
       const newEdges = state.relationships.filter(e => !(
-        (e.source === tableId && e.sourceHandle === columnId) || 
+        (e.source === tableId && e.sourceHandle === columnId) ||
         (e.target === tableId && e.targetHandle === columnId)
       ));
 
@@ -306,12 +307,12 @@ export const useEditorStore = create((set, get) => ({
   // UI / Canvas
   setSelectedTable: (id) => set({ selectedTableId: id }),
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
-  
+
   setCanvasState: (viewport) => {
     set({ canvasState: viewport, isDirty: true });
     get().autoSave();
   },
-  
+
   forceSave: () => {
     get().saveDiagram();
   }
