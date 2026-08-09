@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { DateTime } from "luxon";
 import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 import { useVaultStore } from "../store/vaultStore";
 import VaultHeader from "../components/VaultHeader";
-import DiagramCard from "../components/DiagramCard";
-import NewDiagramModal from "../components/NewDiagramModal";
 import EmptyState from "../components/EmptyState";
 import LoadingSpinner from "../components/LoadingSpinner";
 import {
-  FiFileText,
   FiArrowRight,
   FiPlus,
   FiUpload,
@@ -16,13 +15,120 @@ import {
   FiChevronRight,
 } from "react-icons/fi";
 
+// Modal Internal untuk Create Project
+function NewProjectModal({ onClose, onCreate }) {
+  const [name, setName] = useState("");
+
+  const handleCreate = () => {
+    if (name.trim()) {
+      onCreate(name.trim());
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 bg-base/80 flex items-center justify-center z-50 p-4 backdrop-blur-md animate-fade-in">
+      <div className="bg-surface border border-theme rounded-2xl w-full max-w-md p-10 shadow-2xl animate-pop-in flex flex-col gap-6">
+        <div>
+          <h2 className="font-display section-title text-primary mb-2">
+            New Project
+          </h2>
+          <p className="text-secondary font-light">
+            Create a new project workspace.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <label className="text-sm font-medium text-primary">
+            Project Name
+          </label>
+          <input
+            type="text"
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full bg-base border border-theme rounded-lg px-4 py-3 text-primary focus:outline-none focus:border-focus focus:ring-1 focus:ring-focus transition-all"
+            placeholder="e.g. E-commerce Backend"
+            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          />
+        </div>
+
+        <div className="flex justify-end gap-4 mt-4 pt-6 border-t border-theme/50">
+          <button onClick={onClose} className="btn-secondary">
+            Cancel
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={!name.trim()}
+            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed hover-lift"
+          >
+            Create Project
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Komponen Card untuk Project
+function ProjectCard({ project, onClick }) {
+  const timeAgo =
+    DateTime.fromISO(project.updatedAt).toRelative() || "Just now";
+  const diagramCount = project.diagrams?.length || 0;
+
+  // Ambil tipe diagram unik yang ada di dalam project ini
+  const uniqueTypes = [...new Set((project.diagrams || []).map((d) => d.type))];
+
+  return (
+    <div
+      onClick={onClick}
+      className="group relative premium-card p-6 cursor-pointer hover-lift active:scale-[0.98] flex flex-col h-48 justify-between transition-all"
+    >
+      <div>
+        <div className="flex justify-between items-start mb-4">
+          <span className="text-[10px] px-2 py-0.5 rounded-full border border-theme uppercase font-semibold tracking-wider bg-surface-2 text-primary">
+            {diagramCount} {diagramCount === 1 ? "Diagram" : "Diagrams"}
+          </span>
+          <div className="flex gap-1">
+            {uniqueTypes.map((type) => (
+              <span
+                key={type}
+                className="text-[9px] px-1.5 py-0.5 rounded border border-theme uppercase font-bold tracking-widest bg-base text-muted"
+              >
+                {type === "erd" ? "ERD" : "FLOWCHART"}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <h3
+          className="font-display subsection-title text-primary line-clamp-2"
+          title={project.name}
+        >
+          {project.name}
+        </h3>
+      </div>
+
+      <div className="flex items-end justify-between mt-auto">
+        <div className="text-sm text-muted font-light">{timeAgo}</div>
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-3 text-accent text-xl">
+          <FiArrowRight />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main Home Component
 function Home() {
+  const navigate = useNavigate();
   const {
     currentVault,
     recentVaults,
     loadRecentVaults,
     openVault,
     createVault,
+    createProject,
     isLoading,
     error,
   } = useVaultStore();
@@ -33,13 +139,7 @@ function Home() {
   }, [loadRecentVaults]);
 
   const handleOpenFolder = async () => {
-    if (!window.api) {
-      console.warn(
-        "Desktop API is not available. Please run the app via Electron.",
-      );
-      return;
-    }
-
+    if (!window.api) return;
     const paths = await window.api.openFolder();
     if (paths && paths.length > 0) {
       openVault(paths[0]);
@@ -47,16 +147,20 @@ function Home() {
   };
 
   const handleCreateFolder = async () => {
-    if (!window.api) {
-      console.warn(
-        "Desktop API is not available. Please run the app via Electron.",
-      );
-      return;
-    }
-
+    if (!window.api) return;
     const paths = await window.api.openFolder();
     if (paths && paths.length > 0) {
       createVault(paths[0]);
+    }
+  };
+
+  const handleCreateProject = async (name) => {
+    try {
+      const projectId = await createProject(name);
+      setIsModalOpen(false);
+      navigate(`/project/${projectId}`);
+    } catch (err) {
+      alert("Failed to create project: " + err.message);
     }
   };
 
@@ -74,7 +178,7 @@ function Home() {
           >
             <div className="orb orb-sky w-[600px] h-[600px] -top-[300px] -right-[200px]" />
 
-            <VaultHeader onNewDiagram={() => setIsModalOpen(true)} />
+            <VaultHeader />
 
             {error && (
               <div className="bg-danger/10 text-danger border border-danger/30 p-4 rounded-xl mb-8 z-10 relative animate-fade-in">
@@ -99,10 +203,10 @@ function Home() {
                   </div>
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-primary mb-1">
-                      Start New Diagram
+                      Create New Project
                     </h3>
                     <p className="text-sm text-secondary font-light">
-                      Create a fresh schema from scratch.
+                      Start a new workspace for your diagrams.
                     </p>
                   </div>
                   <div className="text-muted group-hover:text-accent group-hover:translate-x-1 transition-all text-xl">
@@ -116,10 +220,10 @@ function Home() {
                   </div>
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-primary mb-1">
-                      Import Diagram
+                      Import Project
                     </h3>
                     <p className="text-sm text-secondary font-light">
-                      Upload an existing DrawInDB JSON file.
+                      Upload an existing DrawInDB project folder.
                     </p>
                   </div>
                   <div className="text-muted group-hover:text-accent group-hover:translate-x-1 transition-all text-xl">
@@ -132,7 +236,7 @@ function Home() {
             <div className="z-10 relative">
               <div className="flex items-center justify-between mb-8">
                 <h2 className="font-display subsection-title text-primary">
-                  Diagrams
+                  Projects
                 </h2>
                 <button className="text-xs font-semibold text-muted uppercase tracking-widest hover:text-primary transition-colors">
                   Sort by: Recent
@@ -141,26 +245,33 @@ function Home() {
 
               {isLoading ? (
                 <div className="h-64 flex items-center justify-center">
-                  <LoadingSpinner text="Loading diagrams..." />
+                  <LoadingSpinner text="Loading projects..." />
                 </div>
-              ) : currentVault.diagrams.length === 0 ? (
+              ) : currentVault.projects?.length === 0 ? (
                 <div className="premium-card p-16 flex items-center justify-center min-h-[300px]">
                   <EmptyState
-                    title="No diagrams in this vault"
-                    description="Start your project by creating your first diagram using the Quick Start cards above."
+                    title="No projects in this vault"
+                    description="Start your work by creating your first project using the Quick Start cards above."
                   />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-8">
-                  {currentVault.diagrams.map((diagram) => (
-                    <DiagramCard key={diagram.filename} diagram={diagram} />
+                  {currentVault.projects?.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      onClick={() => navigate(`/project/${project.id}`)}
+                    />
                   ))}
                 </div>
               )}
             </div>
 
             {isModalOpen && (
-              <NewDiagramModal onClose={() => setIsModalOpen(false)} />
+              <NewProjectModal
+                onClose={() => setIsModalOpen(false)}
+                onCreate={handleCreateProject}
+              />
             )}
           </motion.div>
         ) : (

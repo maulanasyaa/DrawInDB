@@ -1,35 +1,53 @@
 import { create } from 'zustand';
 import { applyNodeChanges, applyEdgeChanges, addEdge } from 'reactflow';
-import { useVaultStore } from './vaultStore';
-
-let saveTimeoutId = null;
 
 export const useEditorStore = create((set, get) => ({
   diagramMeta: null,
   tables: [],
   relationships: [],
-  canvasState: { zoom: 1, pan: { x: 0, y: 0 } },
-
+  nodes: [],
+  flowEdges: [],
+  canvasState: { x: 0, y: 0, zoom: 1 },
   selectedTableId: null,
   isSidebarOpen: true,
   isDirty: false,
   isLoading: true,
-
   _vaultPath: null,
+  _projectId: null,
   _filename: null,
 
-  loadDiagram: async (vaultPath, filename) => {
-    set({ isLoading: true, _vaultPath: vaultPath, _filename: filename });
+  // Timer untuk auto-save
+  _autoSaveTimer: null,
+
+  autoSave: () => {
+    // Debounce: Tunggu 1.5 detik setelah user berhenti mengubah sesuatu sebelum auto-save
+    if (get()._autoSaveTimer) clearTimeout(get()._autoSaveTimer);
+    const timer = setTimeout(() => {
+      if (get().isDirty) get().saveDiagram();
+    }, 1500);
+    set({ _autoSaveTimer: timer });
+  },
+
+  loadDiagram: async (vaultPath, projectId, filename) => {
+    set({ isLoading: true, _vaultPath: vaultPath, _projectId: projectId, _filename: filename });
     try {
-      const filePath = await window.api.pathJoin(vaultPath, 'diagrams', filename);
+      const filePath = await window.api.pathJoin(vaultPath, 'projects', projectId, 'diagrams', filename);
       const content = await window.api.readFile(filePath);
       const data = JSON.parse(content);
 
+      let parsedCanvas = data.canvas || { x: 0, y: 0, zoom: 1 };
+      if (parsedCanvas.pan) {
+        parsedCanvas = { x: parsedCanvas.pan.x || 0, y: parsedCanvas.pan.y || 0, zoom: parsedCanvas.zoom || 1 };
+      }
+
       set({
         diagramMeta: data.meta,
-        tables: data.tables || [],
+        // PERBAIKAN ERD: Pastikan semua data tabel lama otomatis diset sebagai tipe 'table'
+        tables: (data.tables || []).map(t => ({ ...t, type: 'table' })),
         relationships: data.relationships || [],
-        canvasState: data.canvas || { zoom: 1, pan: { x: 0, y: 0 } },
+        nodes: data.nodes || [],
+        flowEdges: data.edges || [],
+        canvasState: parsedCanvas,
         isLoading: false,
         isDirty: false,
         selectedTableId: null,
@@ -41,12 +59,11 @@ export const useEditorStore = create((set, get) => ({
   },
 
   saveDiagram: async () => {
-    const { _vaultPath, _filename, diagramMeta, tables, relationships, canvasState, isDirty } = get();
-    if (!_vaultPath || !_filename || !diagramMeta || !isDirty) return;
+    const { _vaultPath, _projectId, _filename, diagramMeta, tables, relationships, nodes, flowEdges, canvasState, isDirty } = get();
+    if (!_vaultPath || !_projectId || !_filename || !diagramMeta || !isDirty) return;
 
     try {
-      const filePath = await window.api.pathJoin(_vaultPath, 'diagrams', _filename);
-
+      const filePath = await window.api.pathJoin(_vaultPath, 'projects', _projectId, 'diagrams', _filename);
       const updatedMeta = { ...diagramMeta, updated_at: new Date().toISOString() };
 
       const fileData = {
@@ -55,296 +72,124 @@ export const useEditorStore = create((set, get) => ({
         canvas: canvasState,
         tables,
         relationships,
-        notes: []
+        nodes,
+        edges: flowEdges
       };
 
       await window.api.writeFile(filePath, JSON.stringify(fileData, null, 2));
-
-      // ONLY update isDirty to minimize re-renders. Avoid modifying diagramMeta inline if it's subscribed to by many components.
-      // We do need to keep the state's meta updated for the NEXT save though, but we can just do it silently or as a single patch.
       set({ isDirty: false, diagramMeta: updatedMeta });
-
-      // Update vaultStore silently if possible, or wait until reload. The list is only shown on Home.
-      // For now, doing it here is fine as long as Editor.jsx does not subscribe to the whole currentVault.
-      const vaultStore = useVaultStore.getState();
-      if (vaultStore.currentVault) {
-        const updatedDiagrams = vaultStore.currentVault.diagrams.map(d =>
-          d.filename === _filename ? { ...d, updated_at: updatedMeta.updated_at } : d
-        );
-        useVaultStore.setState({
-          currentVault: { ...vaultStore.currentVault, diagrams: updatedDiagrams }
-        });
-      }
     } catch (e) {
       console.error('Failed to save diagram:', e);
     }
   },
 
-  autoSave: () => {
-    const { saveDiagram } = get();
-
-    if (saveTimeoutId) clearTimeout(saveTimeoutId);
-
-    saveTimeoutId = setTimeout(() => {
-      useEditorStore.getState().saveDiagram();
-    }, 1500);
-
-    set({ isDirty: true });
+  addTable: (position) => {
+    const { tables } = get();
+    const newTable = {
+      id: `table-${Date.now()}`,
+      type: 'table', // Penanda wajib untuk React Flow
+      position,
+      data: { name: 'new_table', columns: [] }
+    };
+    set({ tables: [...tables, newTable], isDirty: true });
+    get().autoSave();
   },
 
-  // React Flow generic handlers
-  onNodesChange: (changes) => {
-    set((state) => ({
-      tables: applyNodeChanges(changes, state.tables),
+  addFlowNode: (type, position) => {
+    const { nodes } = get();
+    let width = 160, height = 64, label = 'Process';
+
+    switch(type) {
+      case 'terminal': height = 56; label = 'Start'; break;
+      case 'decision': width = 160; height = 160; label = 'Decision'; break;
+      case 'io': label = 'Input/Output'; break;
+      case 'database': width = 140; height = 80; label = 'Database'; break; // Bentuk Baru
+      case 'document': height = 70; label = 'Document'; break;
+      case 'predefined': label = 'Sub-process'; break;
+      case 'loop': width = 160; height = 64; label = 'Loop'; break; // Bentuk Baru
+      case 'connector': width = 40; height = 40; label = ''; break;
+      case 'offpage': width = 100; height = 80; label = '1'; break;
+      case 'annotation': width = 140; label = ''; break; // Annotation tidak perlu limit height
+    }
+
+    const newNode = {
+      id: `flow-${Date.now()}`,
+      type: 'flowchart',
+      position,
+      data: { type, label },
+      style: type === 'annotation' ? { width } : { width, height }
+    };
+
+    set({ nodes: [...nodes, newNode], isDirty: true });
+    get().autoSave();
+  },
+
+  // Fungsi baru untuk memastikan teks tersimpan ke global state
+  updateNodeData: (id, newData) => {
+    const { nodes } = get();
+    set({
+      nodes: nodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...newData } } : n),
       isDirty: true
-    }));
+    });
+    get().autoSave();
+  },
+
+  onNodesChange: (changes) => {
+    const isFlowchart = get().diagramMeta?.type === 'flowchart';
+    if (isFlowchart) {
+      set({ nodes: applyNodeChanges(changes, get().nodes), isDirty: true });
+    } else {
+      set({ tables: applyNodeChanges(changes, get().tables), isDirty: true });
+    }
     get().autoSave();
   },
 
   onEdgesChange: (changes) => {
-    set((state) => ({
-      relationships: applyEdgeChanges(changes, state.relationships),
-      isDirty: true
-    }));
+    const isFlowchart = get().diagramMeta?.type === 'flowchart';
+    if (isFlowchart) {
+      set({ flowEdges: applyEdgeChanges(changes, get().flowEdges), isDirty: true });
+    } else {
+      set({ relationships: applyEdgeChanges(changes, get().relationships), isDirty: true });
+    }
     get().autoSave();
   },
 
   onConnect: (connection) => {
-    const { tables, relationships } = get();
-    const sourceTable = tables.find(t => t.id === connection.source);
-    const targetTable = tables.find(t => t.id === connection.target);
-    const sourceCol = sourceTable?.data.columns.find(c => c.id === connection.sourceHandle);
-    const targetCol = targetTable?.data.columns.find(c => c.id === connection.targetHandle);
+    const isFlowchart = get().diagramMeta?.type === 'flowchart';
+    if (isFlowchart) {
+      const sourceNode = get().nodes.find(n => n.id === connection.source);
+      let edgeLabel = '';
 
-    if (!sourceCol || !targetCol) return;
+      if (sourceNode?.data?.type === 'decision') {
+        const existingOutEdges = get().flowEdges.filter(e => e.source === sourceNode.id);
+        edgeLabel = existingOutEdges.length === 0 ? 'Yes' : 'No';
+      }
 
-    let parentCol = null, childCol = null;
-    let childTableId = null;
+      const newEdge = {
+        ...connection,
+        id: `e-${connection.source}-${connection.target}-${Date.now()}`,
+        label: edgeLabel,
+        type: 'smoothstep',
+        style: { stroke: '#a1a1aa', strokeWidth: 1.5 },
+        labelStyle: { fill: '#e4e4e7', fontWeight: 600, fontSize: 12 },
+        labelBgStyle: { fill: '#18181b', stroke: '#3f3f46', strokeWidth: 1 },
+        labelBgPadding: [6, 4],
+        labelBgBorderRadius: 4,
+        markerEnd: { type: 'arrowclosed', color: '#a1a1aa' }
+      };
 
-    if (targetCol.pk && !sourceCol.pk) {
-      parentCol = targetCol;
-      childCol = sourceCol;
-      childTableId = connection.source;
-    } else if (sourceCol.pk && !targetCol.pk) {
-      parentCol = sourceCol;
-      childCol = targetCol;
-      childTableId = connection.target;
+      set({ flowEdges: addEdge(newEdge, get().flowEdges), isDirty: true });
     } else {
-      parentCol = targetCol;
-      childCol = sourceCol;
-      childTableId = connection.source;
+      const newRel = { ...connection, id: `rel-${Date.now()}` };
+      set({ relationships: addEdge(newRel, get().relationships), isDirty: true });
     }
-
-    const edge = {
-      ...connection,
-      id: `edge-${Date.now()}`,
-      type: 'smoothstep',
-      animated: false,
-      style: { strokeWidth: 1.5 }
-    };
-
-    const updatedTables = tables.map(t => {
-      if (t.id === childTableId) {
-        const updatedCols = t.data.columns.map(c =>
-          c.id === childCol.id ? { ...c, type: parentCol.type, fk: true } : c
-        );
-        return { ...t, data: { ...t.data, columns: updatedCols } };
-      }
-      return t;
-    });
-
-    set({
-      relationships: addEdge(edge, relationships),
-      tables: updatedTables,
-      isDirty: true
-    });
     get().autoSave();
   },
 
-  // Table Actions
-  addTable: (position = { x: 200, y: 200 }) => {
-    const { tables } = get();
-    // Auto-increment table name
-    let num = tables.length + 1;
-    let name = `table_${num}`;
-    while(tables.some(t => t.data.name === name)) {
-      num++;
-      name = `table_${num}`;
-    }
-
-    // Resolve overlap for new node position using bounding box logic
-    let finalPos = { ...position };
-    let isOccupied = true;
-    let attempts = 0;
-    while (isOccupied && attempts < 50) {
-      isOccupied = tables.some(t => {
-        const w2 = t.width || 260;
-        const h2 = t.height || 200;
-        const overlapX = finalPos.x < t.position.x + w2 && finalPos.x + 260 > t.position.x;
-        const overlapY = finalPos.y < t.position.y + h2 && finalPos.y + 200 > t.position.y;
-        return overlapX && overlapY;
-      });
-      if (isOccupied) {
-        finalPos.x += 40;
-        finalPos.y += 40;
-        attempts++;
-      }
-    }
-
-    const newTable = {
-      id: `table-${Date.now()}`,
-      type: 'tableNode',
-      position: finalPos,
-      data: {
-        name,
-        columns: [
-          { id: `col-${Date.now()}`, name: 'id', type: 'INTEGER', pk: true, fk: false, notNull: true, unique: true }
-        ]
-      }
-    };
-
-    set({ tables: [...tables, newTable], isDirty: true });
-    get().autoSave();
-  },
-
-  updateTable: (tableId, dataUpdates) => {
-    set((state) => ({
-      tables: state.tables.map(t => t.id === tableId ? { ...t, data: { ...t.data, ...dataUpdates } } : t),
-      isDirty: true
-    }));
-    get().autoSave();
-  },
-
-  deleteTable: (tableId) => {
-    set((state) => ({
-      tables: state.tables.filter(t => t.id !== tableId),
-      relationships: state.relationships.filter(e => e.source !== tableId && e.target !== tableId),
-      selectedTableId: state.selectedTableId === tableId ? null : state.selectedTableId,
-      isDirty: true
-    }));
-    get().autoSave();
-  },
-
-  toggleTableVisibility: (tableId) => {
-    set((state) => ({
-      tables: state.tables.map(t => t.id === tableId ? { ...t, hidden: !t.hidden } : t),
-      isDirty: true
-    }));
-    get().autoSave();
-  },
-
-  duplicateTable: (tableId) => {
-    const { tables } = get();
-    const tableToClone = tables.find(t => t.id === tableId);
-    if (!tableToClone) return;
-
-    const newTable = {
-      ...tableToClone,
-      id: `table-${Date.now()}`,
-      position: { x: tableToClone.position.x + 50, y: tableToClone.position.y + 50 },
-      data: {
-        ...tableToClone.data,
-        name: `${tableToClone.data.name}_copy`,
-        columns: tableToClone.data.columns.map(c => ({ ...c, id: `col-${Date.now()}-${Math.random()}` }))
-      }
-    };
-
-    set({ tables: [...tables, newTable], isDirty: true });
-    get().autoSave();
-  },
-
-  // Column Actions
-  addColumn: (tableId) => {
-    set((state) => ({
-      tables: state.tables.map(t => {
-        if (t.id === tableId) {
-          const newCol = { id: `col-${Date.now()}`, name: 'new_column', type: 'VARCHAR', pk: false, fk: false, notNull: false, unique: false };
-          return { ...t, data: { ...t.data, columns: [...t.data.columns, newCol] } };
-        }
-        return t;
-      }),
-      isDirty: true
-    }));
-    get().autoSave();
-  },
-
-  updateColumn: (tableId, columnId, dataUpdates) => {
-    set((state) => ({
-      tables: state.tables.map(t => {
-        if (t.id === tableId) {
-          const updatedColumns = t.data.columns.map(c => c.id === columnId ? { ...c, ...dataUpdates } : c);
-          return { ...t, data: { ...t.data, columns: updatedColumns } };
-        }
-        return t;
-      }),
-      isDirty: true
-    }));
-    get().autoSave();
-  },
-
-  deleteColumn: (tableId, columnId) => {
-    set((state) => {
-      // Also remove relationships tied to this column
-      const newEdges = state.relationships.filter(e => !(
-        (e.source === tableId && e.sourceHandle === columnId) ||
-        (e.target === tableId && e.targetHandle === columnId)
-      ));
-
-      const newTables = state.tables.map(t => {
-        if (t.id === tableId) {
-          return { ...t, data: { ...t.data, columns: t.data.columns.filter(c => c.id !== columnId) } };
-        }
-        return t;
-      });
-
-      return { tables: newTables, relationships: newEdges, isDirty: true };
-    });
-    get().autoSave();
-  },
-
-  reorderColumns: (tableId, oldIndex, newIndex) => {
-    set((state) => ({
-      tables: state.tables.map(t => {
-        if (t.id === tableId) {
-          const cols = [...t.data.columns];
-          const [moved] = cols.splice(oldIndex, 1);
-          cols.splice(newIndex, 0, moved);
-          return { ...t, data: { ...t.data, columns: cols } };
-        }
-        return t;
-      }),
-      isDirty: true
-    }));
-    get().autoSave();
-  },
-
-  // Relationship actions
-  updateRelationshipLabel: (edgeId, label) => {
-    set((state) => ({
-      relationships: state.relationships.map(e => e.id === edgeId ? { ...e, label } : e),
-      isDirty: true
-    }));
-    get().autoSave();
-  },
-
-  deleteRelationship: (edgeId) => {
-    set((state) => ({
-      relationships: state.relationships.filter(e => e.id !== edgeId),
-      isDirty: true
-    }));
-    get().autoSave();
-  },
-
-  // UI / Canvas
-  setSelectedTable: (id) => set({ selectedTableId: id }),
-  toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
-
-  setCanvasState: (viewport) => {
+  updateCanvas: (viewport) => {
     set({ canvasState: viewport, isDirty: true });
     get().autoSave();
   },
 
-  forceSave: () => {
-    get().saveDiagram();
-  }
+  setSelectedTable: (id) => set({ selectedTableId: id })
 }));

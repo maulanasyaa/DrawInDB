@@ -1,281 +1,176 @@
-import React, { useEffect, useMemo, useCallback, useState } from "react";
+import React, { useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { FiInfo } from "react-icons/fi";
 import ReactFlow, {
-  Background,
   ReactFlowProvider,
+  Background,
+  Controls,
   useReactFlow,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import { AnimatePresence } from "framer-motion";
 
-import { useEditorStore } from "../store/editorStore";
 import { useVaultStore } from "../store/vaultStore";
-import { useEditorShortcuts } from "../hooks/useEditorShortcuts";
-import { generateSQL } from "../utils/sqlGenerator";
+import { useEditorStore } from "../store/editorStore";
 
-import TableNode from "../components/editor/TableNode";
-import Toolbar from "../components/editor/Toolbar";
+import EditorHeader from "../components/editor/EditorHeader";
 import Sidebar from "../components/editor/Sidebar";
-import SQLPanel from "../components/editor/SQLPanel";
-import EmptyState from "../components/EmptyState";
+import FlowchartSidebar from "../components/editor/FlowchartSidebar";
+import TableNode from "../components/editor/TableNode";
+import FlowchartNode from "../components/editor/FlowchartNode";
+import LoadingSpinner from "../components/LoadingSpinner";
+
+const nodeTypes = {
+  table: TableNode,
+  flowchart: FlowchartNode,
+};
 
 function EditorContent() {
-  const { filename } = useParams();
+  const reactFlowWrapper = useRef(null);
+  const { projectId, filename } = useParams();
   const navigate = useNavigate();
+  const { project } = useReactFlow();
+
   const vaultPath = useVaultStore((state) => state.currentVault?.path);
 
+  const loadDiagram = useEditorStore((state) => state.loadDiagram);
   const isLoading = useEditorStore((state) => state.isLoading);
   const diagramMeta = useEditorStore((state) => state.diagramMeta);
-  const loadDiagram = useEditorStore((state) => state.loadDiagram);
+
+  const tables = useEditorStore((state) => state.tables);
+  const relationships = useEditorStore((state) => state.relationships);
+  const nodes = useEditorStore((state) => state.nodes);
+  const flowEdges = useEditorStore((state) => state.flowEdges);
+
+  const canvasState = useEditorStore((state) => state.canvasState);
+  const isSidebarOpen = useEditorStore((state) => state.isSidebarOpen);
+
+  const onNodesChange = useEditorStore((state) => state.onNodesChange);
+  const onEdgesChange = useEditorStore((state) => state.onEdgesChange);
+  const onConnect = useEditorStore((state) => state.onConnect);
   const addTable = useEditorStore((state) => state.addTable);
+  const addFlowNode = useEditorStore((state) => state.addFlowNode);
+  const updateCanvas = useEditorStore((state) => state.updateCanvas);
+
   const setSelectedTable = useEditorStore((state) => state.setSelectedTable);
-  const setCanvasState = useEditorStore((state) => state.setCanvasState);
-  const toggleSidebar = useEditorStore((state) => state.toggleSidebar);
 
-  const storeTables = useEditorStore((state) => state.tables);
-  const storeRelationships = useEditorStore((state) => state.relationships);
-  const onNodesChangeStore = useEditorStore((state) => state.onNodesChange);
-  const onEdgesChangeStore = useEditorStore((state) => state.onEdgesChange);
-  const onConnectStore = useEditorStore((state) => state.onConnect);
-
-  const { screenToFlowPosition, getViewport } = useReactFlow();
-
-  const [showSQLPanel, setShowSQLPanel] = useState(false);
-  const [generatedSQL, setGeneratedSQL] = useState("");
-  const [contextMenu, setContextMenu] = useState(null);
-
-  // Shortcuts
-  useEditorShortcuts({
-    onToggleSidebar: toggleSidebar,
-    onEscape: () => {
-      setSelectedTable(null);
-      setShowSQLPanel(false);
-      setContextMenu(null);
-    },
-  });
-
-  const nodeTypes = useMemo(() => ({ tableNode: TableNode }), []);
+  const isFlowchart = diagramMeta?.type === "flowchart";
 
   useEffect(() => {
     if (!vaultPath) {
       navigate("/");
       return;
     }
-    loadDiagram(vaultPath, filename);
-  }, [vaultPath, filename, navigate, loadDiagram]);
+    loadDiagram(vaultPath, projectId, filename);
+  }, [vaultPath, projectId, filename, navigate, loadDiagram]);
+
+  const onDragOver = useCallback((event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const onDrop = useCallback(
+    (event) => {
+      event.preventDefault();
+      const type = event.dataTransfer.getData("application/reactflow");
+      if (typeof type === "undefined" || !type) return;
+
+      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+      const position = project({
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top,
+      });
+
+      if (isFlowchart) {
+        addFlowNode(type, position);
+      } else {
+        if (type === "table") {
+          addTable(position);
+        }
+      }
+    },
+    [project, addTable, addFlowNode, isFlowchart],
+  );
+
+  const onNodeClick = useCallback(
+    (_, node) => {
+      if (!isFlowchart) {
+        setSelectedTable(node.id);
+      }
+    },
+    [setSelectedTable, isFlowchart],
+  );
 
   const onPaneClick = useCallback(() => {
-    setSelectedTable(null);
-    setContextMenu(null);
-  }, [setSelectedTable]);
-
-  const onDoubleClick = useCallback(
-    (event) => {
-      // Only trigger if double clicking the pane, not a node or edge
-      if (
-        event.target.closest(".react-flow__node") ||
-        event.target.closest(".react-flow__edge")
-      ) {
-        return;
-      }
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-      addTable(position);
-    },
-    [addTable, screenToFlowPosition],
-  );
-
-  const onPaneContextMenu = useCallback((event) => {
-    event.preventDefault();
-    setContextMenu({ x: event.clientX, y: event.clientY });
-  }, []);
-
-  const handleAddTableFromMenu = () => {
-    if (contextMenu) {
-      const position = screenToFlowPosition({
-        x: contextMenu.x,
-        y: contextMenu.y,
-      });
-      addTable(position);
+    if (!isFlowchart) {
+      setSelectedTable(null);
     }
-    setContextMenu(null);
-  };
+  }, [setSelectedTable, isFlowchart]);
 
-  const onMoveEnd = useCallback(
-    (event, viewport) => {
-      setCanvasState(viewport);
-    },
-    [setCanvasState],
-  );
-
-  const onNodeDragStop = useCallback(
-    (event, node) => {
-      const { tables } = useEditorStore.getState();
-      const otherNodes = tables.filter((n) => n.id !== node.id);
-
-      // Default dimensions for a TableNode
-      const w1 = node.width || 260;
-      const h1 = node.height || 200;
-
-      let finalX = node.position.x;
-      let finalY = node.position.y;
-      let isOverlapping = true;
-      let attempts = 0;
-
-      while (isOverlapping && attempts < 50) {
-        isOverlapping = false;
-        for (const other of otherNodes) {
-          const w2 = other.width || 260;
-          const h2 = other.height || 200;
-
-          const collideX =
-            finalX < other.position.x + w2 && finalX + w1 > other.position.x;
-          const collideY =
-            finalY < other.position.y + h2 && finalY + h1 > other.position.y;
-
-          if (collideX && collideY) {
-            finalX += 40;
-            finalY += 40;
-            isOverlapping = true;
-            break;
-          }
-        }
-        attempts++;
-      }
-
-      if (attempts > 0) {
-        onNodesChangeStore([
-          { id: node.id, type: "position", position: { x: finalX, y: finalY } },
-        ]);
-      }
-    },
-    [onNodesChangeStore],
-  );
-
-  const handleToggleSQLPanel = () => {
-    if (!showSQLPanel) {
-      // Generate SQL right before opening
-      const sql = generateSQL({
-        meta: diagramMeta,
-        tables: storeTables,
-        relationships: storeRelationships,
-      });
-      setGeneratedSQL(sql);
-    }
-    setShowSQLPanel(!showSQLPanel);
-  };
-
-  const activeTableId = useEditorStore((state) => state.selectedTableId);
-  const edgeArray = useMemo(() => {
-    return storeRelationships.map((edge) => ({
-      ...edge,
-      style: {
-        ...edge.style,
-        stroke:
-          edge.source === activeTableId || edge.target === activeTableId
-            ? "var(--accent)"
-            : "var(--text-muted)",
-      },
-      animated: edge.source === activeTableId || edge.target === activeTableId,
-    }));
-  }, [storeRelationships, activeTableId]);
-
-  const isValidConnection = useCallback((connection) => {
-    if (connection.source === connection.target) return false;
-
-    const { relationships } = useEditorStore.getState();
-    const edgeExists = relationships.some(
-      (e) =>
-        e.source === connection.source &&
-        e.target === connection.target &&
-        e.sourceHandle === connection.sourceHandle &&
-        e.targetHandle === connection.targetHandle,
-    );
-
-    return !edgeExists;
-  }, []);
-
-  if (isLoading || !diagramMeta) {
+  if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-base text-muted">
-        Loading diagram...
+      <div className="flex h-screen items-center justify-center bg-canvas text-muted">
+        <LoadingSpinner text="Loading workspace..." />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-base">
-      <Toolbar onToggleSQL={handleToggleSQLPanel} />
-      <div className="flex-1 relative overflow-hidden">
-        {/* Sidebar is now positioned absolutely within this relative container */}
-        <Sidebar />
+    <div className="flex flex-col h-screen w-full bg-canvas text-primary overflow-hidden relative">
+      <EditorHeader />
 
-        <div className="absolute inset-0 z-0">
-          {storeTables.length === 0 && (
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10 opacity-70">
-              <EmptyState
-                title="Your canvas is empty"
-                description="Double-click anywhere or click '+ Add Table' to start."
-              />
+      <div className="flex-1 relative flex" ref={reactFlowWrapper}>
+        <AnimatePresence>
+          {isSidebarOpen &&
+            (isFlowchart ? (
+              <FlowchartSidebar key="flowchart-sidebar" />
+            ) : (
+              <Sidebar key="erd-sidebar" />
+            ))}
+        </AnimatePresence>
+
+        {isFlowchart && (
+          <div className="absolute bottom-6 left-150 -translate-x-1/2 z-40 bg-surface border border-theme px-5 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs text-secondary animate-fade-in pointer-events-none">
+            <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-accent">
+              <FiInfo className="text-sm" />
             </div>
-          )}
+            <span>
+              <strong className="text-primary font-medium">Tips:</strong> Drag
+              the line from the <strong>Right/Bottom</strong> (Source) to the{" "}
+              <strong>Left/Top</strong> (Target).
+            </span>
+          </div>
+        )}
 
-          <ReactFlow
-            nodes={storeTables}
-            edges={edgeArray}
-            onNodesChange={onNodesChangeStore}
-            onEdgesChange={onEdgesChangeStore}
-            onConnect={onConnectStore}
-            onNodeDragStop={onNodeDragStop}
-            nodeTypes={nodeTypes}
-            onPaneClick={onPaneClick}
-            onDoubleClick={onDoubleClick}
-            onPaneContextMenu={onPaneContextMenu}
-            onMoveEnd={onMoveEnd}
-            minZoom={0.2}
-            maxZoom={3}
-            snapToGrid={false}
-            defaultViewport={useEditorStore.getState().canvasState}
-            proOptions={{ hideAttribution: true }}
-            connectionLineType="smoothstep"
-            isValidConnection={isValidConnection}
-            className="bg-base"
-          >
-            <Background
-              variant="dots"
-              gap={28}
-              size={2}
-              color="var(--dot-color)"
-            />
-          </ReactFlow>
-
-          {contextMenu && (
-            <div
-              className="absolute bg-surface border border-theme rounded shadow-xl z-50 py-1"
-              style={{
-                top: contextMenu.y - 56 /* Toolbar height */,
-                left: contextMenu.x,
-              }}
-            >
-              <button
-                onClick={handleAddTableFromMenu}
-                className="w-full text-left px-4 py-2 text-sm text-primary hover:bg-hover"
-              >
-                Add Table Here
-              </button>
-            </div>
-          )}
-
-          {showSQLPanel && (
-            <SQLPanel
-              sql={generatedSQL}
-              diagramName={diagramMeta.name}
-              dbType={diagramMeta.db_type}
-              onClose={() => setShowSQLPanel(false)}
-            />
-          )}
-        </div>
+        <ReactFlow
+          nodes={isFlowchart ? nodes : tables}
+          edges={isFlowchart ? flowEdges : relationships}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+          defaultEdgeOptions={{ type: "smoothstep" }}
+          onInit={(instance) => {
+            instance.setViewport({
+              x: canvasState.x || 0,
+              y: canvasState.y || 0,
+              zoom: canvasState.zoom || 1,
+            });
+          }}
+          onMoveEnd={(event, viewport) => {
+            updateCanvas(viewport);
+          }}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          nodeTypes={nodeTypes}
+          minZoom={0.1}
+          maxZoom={2}
+          className="bg-canvas"
+        >
+          <Background color="#555" gap={24} size={1} />
+          <Controls className="!bg-surface !border-theme !fill-primary !text-primary shadow-lg" />
+        </ReactFlow>
       </div>
     </div>
   );

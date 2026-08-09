@@ -1,10 +1,152 @@
 import { create } from 'zustand';
 
 export const useVaultStore = create((set, get) => ({
-  currentVault: null, // { path, name, diagrams: [] }
-  recentVaults: [],   // [ { path, name } ]
+  currentVault: null, // { path, name, projects: [] }
+  recentVaults: [],
   isLoading: false,
   error: null,
+
+  openVault: async (folderPath) => {
+    set({ isLoading: true, error: null });
+    try {
+      const configPath = await window.api.pathJoin(folderPath, '.drawindb', 'config.json');
+      const exists = await window.api.pathExists(configPath);
+
+      if (!exists) {
+        throw new Error('Not a valid DrawInDB vault. Missing config.');
+      }
+
+      const configStr = await window.api.readFile(configPath);
+      const config = JSON.parse(configStr);
+
+      // AUTO-MIGRATION LOGIC (Legacy ke struktur Project)
+      const legacyDiagramsPath = await window.api.pathJoin(folderPath, 'diagrams');
+      const legacyExists = await window.api.pathExists(legacyDiagramsPath);
+      const projectsPath = await window.api.pathJoin(folderPath, 'projects');
+
+      if (!await window.api.pathExists(projectsPath)) {
+        await window.api.mkdir(projectsPath);
+      }
+
+      if (legacyExists) {
+        const legacyFiles = await window.api.listFiles(legacyDiagramsPath);
+        const legacyDiagrams = legacyFiles.filter(f => !f.isDirectory && f.name.endsWith('.json'));
+
+        if (legacyDiagrams.length > 0) {
+          // Buat Default Project
+          const defaultProjId = `proj_${Date.now()}`;
+          const defaultProjPath = await window.api.pathJoin(projectsPath, defaultProjId);
+          await window.api.mkdir(defaultProjPath);
+          await window.api.mkdir(await window.api.pathJoin(defaultProjPath, 'diagrams'));
+
+          // Simpan metadata project
+          await window.api.writeFile(
+            await window.api.pathJoin(defaultProjPath, 'project.json'),
+            JSON.stringify({ id: defaultProjId, name: "Default Project", createdAt: new Date().toISOString() })
+          );
+
+          // Pindahkan file lama ke dalam struktur baru
+          for (const file of legacyDiagrams) {
+            const oldPath = await window.api.pathJoin(legacyDiagramsPath, file.name);
+            const newPath = await window.api.pathJoin(defaultProjPath, 'diagrams', file.name);
+            const content = await window.api.readFile(oldPath);
+            const parsed = JSON.parse(content);
+            parsed.meta.projectId = defaultProjId;
+            parsed.meta.type = 'erd'; // Set eksplisit ERD untuk file lama
+            await window.api.writeFile(newPath, JSON.stringify(parsed, null, 2));
+            await window.api.deleteFile(oldPath);
+          }
+        }
+      }
+
+      // LOAD PROJECTS
+      const projectDirs = await window.api.listFiles(projectsPath);
+      const projects = [];
+
+      for (const item of projectDirs) {
+        const dirName = typeof item === 'string' ? item : item.name;
+        const projPath = await window.api.pathJoin(projectsPath, dirName);
+        const metaPath = await window.api.pathJoin(projPath, 'project.json');
+
+        if (await window.api.pathExists(metaPath)) {
+          const projMeta = JSON.parse(await window.api.readFile(metaPath));
+
+          const diagramsDir = await window.api.pathJoin(projPath, 'diagrams');
+          const diagrams = [];
+
+          if (await window.api.pathExists(diagramsDir)) {
+            const dFiles = await window.api.listFiles(diagramsDir);
+
+            for (const fileItem of dFiles) {
+              const fileName = typeof fileItem === 'string' ? fileItem : fileItem.name;
+
+              if (fileName.endsWith('.json')) {
+                const dPath = await window.api.pathJoin(diagramsDir, fileName);
+                const dContent = JSON.parse(await window.api.readFile(dPath));
+                diagrams.push({
+                  filename: fileName,
+                  name: dContent.meta.name,
+                  type: dContent.meta.type || 'erd',
+                  db_type: dContent.meta.db_type,
+                  updated_at: dContent.meta.updated_at
+                });
+              }
+            }
+          }
+
+          projects.push({ ...projMeta, diagrams });
+        }
+      }
+
+      await window.api.saveRecentVault(folderPath);
+      set({
+        currentVault: { path: folderPath, name: config.vault_name, projects },
+        isLoading: false
+      });
+
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  // Fungsi createProject (Tambahan baru)
+  createProject: async (name) => {
+    const { currentVault } = get();
+    if (!currentVault) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      const projectId = `proj_${Date.now()}`;
+      const projectPath = await window.api.pathJoin(currentVault.path, 'projects', projectId);
+
+      // Buat struktur folder project baru
+      await window.api.mkdir(projectPath);
+      await window.api.mkdir(await window.api.pathJoin(projectPath, 'diagrams'));
+
+      const newProject = {
+        id: projectId,
+        name: name,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Simpan metadata project
+      const metaPath = await window.api.pathJoin(projectPath, 'project.json');
+      await window.api.writeFile(metaPath, JSON.stringify(newProject, null, 2));
+
+      // Perbarui state di memori
+      const updatedProjects = [{ ...newProject, diagrams: [] }, ...(currentVault.projects || [])];
+      set({
+        currentVault: { ...currentVault, projects: updatedProjects },
+        isLoading: false
+      });
+
+      return projectId; // Mengembalikan ID untuk kebutuhan routing
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
 
   loadRecentVaults: async () => {
     if (!window.api) {
@@ -28,52 +170,89 @@ export const useVaultStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const configPath = await window.api.pathJoin(folderPath, '.drawindb', 'config.json');
-      const exists = await window.api.pathExists(configPath);
-
-      if (!exists) {
-        throw new Error('Not a valid DrawInDB vault. Missing .drawindb/config.json');
+      if (!(await window.api.pathExists(configPath))) {
+        throw new Error('Not a valid DrawInDB vault. Missing config.');
       }
 
       const configStr = await window.api.readFile(configPath);
       const config = JSON.parse(configStr);
 
-      const diagramsPath = await window.api.pathJoin(folderPath, 'diagrams');
-      const files = await window.api.listFiles(diagramsPath);
-
-      const diagrams = [];
-      for (const file of files) {
-        if (!file.isDirectory && file.name.endsWith('.json')) {
-          const filePath = await window.api.pathJoin(diagramsPath, file.name);
-          try {
-            const content = await window.api.readFile(filePath);
-            const diagramData = JSON.parse(content);
-            diagrams.push({
-              filename: file.name,
-              name: diagramData.meta?.name || file.name.replace('.json', ''),
-              db_type: diagramData.meta?.db_type || 'generic',
-              updated_at: diagramData.meta?.updated_at,
-            });
-          } catch (e) {
-            console.error('Failed to read diagram:', file.name);
-          }
-        }
+      const projectsPath = await window.api.pathJoin(folderPath, 'projects');
+      if (!(await window.api.pathExists(projectsPath))) {
+        await window.api.mkdir(projectsPath);
       }
 
-      // Sort by updated_at descending
-      diagrams.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+      const projects = [];
+
+      try {
+        const projectDirs = await window.api.listFiles(projectsPath);
+
+        for (const item of projectDirs) {
+          // Normalisasi format item (berjaga-jaga jika API mengembalikan string atau objek)
+          const dirName = typeof item === 'string' ? item : (item.name || '');
+
+          // Lewati file sistem Mac seperti .DS_Store atau file tersembunyi iCloud
+          if (!dirName || dirName.startsWith('.')) continue;
+
+          const projPath = await window.api.pathJoin(projectsPath, dirName);
+          const metaPath = await window.api.pathJoin(projPath, 'project.json');
+
+          if (await window.api.pathExists(metaPath)) {
+            try {
+              // Gunakan pelindung try-catch khusus di dalam sini
+              // agar jika 1 project gagal dibaca, project lain tetap aman
+              const metaContent = await window.api.readFile(metaPath);
+              const projMeta = JSON.parse(metaContent);
+
+              const diagramsDir = await window.api.pathJoin(projPath, 'diagrams');
+              const diagrams = [];
+
+              if (await window.api.pathExists(diagramsDir)) {
+                const dFiles = await window.api.listFiles(diagramsDir);
+
+                for (const fileItem of dFiles) {
+                  const fileName = typeof fileItem === 'string' ? fileItem : (fileItem.name || '');
+                  if (!fileName || fileName.startsWith('.')) continue; // Abaikan .DS_Store di dalam folder diagrams
+
+                  if (fileName.endsWith('.json')) {
+                    try {
+                      const dPath = await window.api.pathJoin(diagramsDir, fileName);
+                      const dContent = JSON.parse(await window.api.readFile(dPath));
+                      diagrams.push({
+                        filename: fileName,
+                        name: dContent.meta?.name || 'Untitled',
+                        type: dContent.meta?.type || 'erd',
+                        db_type: dContent.meta?.db_type,
+                        updated_at: dContent.meta?.updated_at || new Date().toISOString()
+                      });
+                    } catch (err) {
+                      console.error(`Gagal membaca diagram ${fileName}:`, err);
+                    }
+                  }
+                }
+              }
+
+              // Urutkan diagram dari yang paling baru diubah
+              diagrams.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+              projects.push({ ...projMeta, diagrams });
+            } catch (err) {
+              console.error(`Gagal memuat project ${dirName}:`, err);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Gagal menelusuri folder projects:", err);
+      }
+
+      projects.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
       await window.api.saveRecentVault(folderPath);
 
       set({
-        currentVault: {
-          path: folderPath,
-          name: config.vault_name || folderPath.split(/[/\\]/).pop(),
-          diagrams
-        },
+        currentVault: { path: folderPath, name: config.vault_name, projects },
         isLoading: false
       });
 
-      get().loadRecentVaults(); // Reload recent vaults
     } catch (error) {
       set({ error: error.message, isLoading: false });
     }
@@ -124,22 +303,70 @@ export const useVaultStore = create((set, get) => ({
     set({ currentVault: null, error: null });
   },
 
-  createDiagram: async (name, dbType) => {
+  // --- PROJECT ACTIONS ---
+
+  renameProject: async (projectId, newName) => {
+    const { currentVault } = get();
+    if (!currentVault) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      const metaPath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'project.json');
+      const content = await window.api.readFile(metaPath);
+      const projectData = JSON.parse(content);
+
+      projectData.name = newName;
+      projectData.updatedAt = new Date().toISOString();
+
+      await window.api.writeFile(metaPath, JSON.stringify(projectData, null, 2));
+
+      const updatedProjects = currentVault.projects.map(p =>
+        p.id === projectId ? { ...p, name: newName, updatedAt: projectData.updatedAt } : p
+      );
+
+      set({ currentVault: { ...currentVault, projects: updatedProjects }, isLoading: false });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  deleteProject: async (projectId) => {
+    const { currentVault } = get();
+    if (!currentVault) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      const projectPath = await window.api.pathJoin(currentVault.path, 'projects', projectId);
+
+      // Catatan: window.api.deleteFile idealnya mendukung penghapusan direktori (rm -rf).
+      // Pastikan API preload Electron Anda (deleteFile/deleteDirectory) bisa menghapus folder beserta isinya.
+      await window.api.deleteFile(projectPath);
+
+      const updatedProjects = currentVault.projects.filter(p => p.id !== projectId);
+
+      set({ currentVault: { ...currentVault, projects: updatedProjects }, isLoading: false });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  // --- DIAGRAM ACTIONS ---
+
+  createDiagram: async (projectId, name, type, dbType = null) => {
     const { currentVault } = get();
     if (!currentVault) return;
 
     set({ isLoading: true, error: null });
     try {
       const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      let filename = `${safeName}.json`;
+      let filename = `${safeName}_${type}.json`;
       let counter = 1;
 
-      // Ensure unique filename
-      const diagramsPath = await window.api.pathJoin(currentVault.path, 'diagrams');
+      const diagramsPath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'diagrams');
       let filePath = await window.api.pathJoin(diagramsPath, filename);
 
       while (await window.api.pathExists(filePath)) {
-        filename = `${safeName}_${counter}.json`;
+        filename = `${safeName}_${type}_${counter}.json`;
         filePath = await window.api.pathJoin(diagramsPath, filename);
         counter++;
       }
@@ -147,31 +374,42 @@ export const useVaultStore = create((set, get) => ({
       const newDiagram = {
         version: "1.0",
         meta: {
+          projectId: projectId,
           name: name,
+          type: type,
           db_type: dbType,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         },
         canvas: {
-          zoom: 1,
-          pan: { x: 0, y: 0 }
+          x: 0,
+          y: 0,
+          zoom: 1
         },
         tables: [],
         relationships: [],
-        notes: []
+        nodes: []
       };
 
       await window.api.writeFile(filePath, JSON.stringify(newDiagram, null, 2));
 
-      const updatedDiagrams = [{
+      const newDiagramMeta = {
         filename,
         name: newDiagram.meta.name,
+        type: newDiagram.meta.type,
         db_type: newDiagram.meta.db_type,
         updated_at: newDiagram.meta.updated_at
-      }, ...currentVault.diagrams];
+      };
+
+      const updatedProjects = currentVault.projects.map(proj => {
+        if (proj.id === projectId) {
+          return { ...proj, diagrams: [newDiagramMeta, ...proj.diagrams] };
+        }
+        return proj;
+      });
 
       set({
-        currentVault: { ...currentVault, diagrams: updatedDiagrams },
+        currentVault: { ...currentVault, projects: updatedProjects },
         isLoading: false
       });
 
@@ -182,18 +420,24 @@ export const useVaultStore = create((set, get) => ({
     }
   },
 
-  deleteDiagram: async (filename) => {
+  deleteDiagram: async (projectId, filename) => {
     const { currentVault } = get();
     if (!currentVault) return;
 
     set({ isLoading: true, error: null });
     try {
-      const filePath = await window.api.pathJoin(currentVault.path, 'diagrams', filename);
+      const filePath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'diagrams', filename);
       await window.api.deleteFile(filePath);
 
-      const updatedDiagrams = currentVault.diagrams.filter(d => d.filename !== filename);
+      const updatedProjects = currentVault.projects.map(proj => {
+        if (proj.id === projectId) {
+          return { ...proj, diagrams: proj.diagrams.filter(d => d.filename !== filename) };
+        }
+        return proj;
+      });
+
       set({
-        currentVault: { ...currentVault, diagrams: updatedDiagrams },
+        currentVault: { ...currentVault, projects: updatedProjects },
         isLoading: false
       });
     } catch (error) {
@@ -201,18 +445,13 @@ export const useVaultStore = create((set, get) => ({
     }
   },
 
-  renameDiagram: async (filename, newName) => {
+  renameDiagram: async (projectId, filename, newName) => {
     const { currentVault } = get();
     if (!currentVault) return;
 
     set({ isLoading: true, error: null });
     try {
-      const filePath = await window.api.pathJoin(currentVault.path, 'diagrams', filename);
-
-      // We don't rename the file itself currently, just the meta.name inside it,
-      // but if the requirement implies renaming the file too we should.
-      // Wait, "renameDiagram(filename, newName)" -> let's just update the meta.name for simplicity,
-      // or change the filename too? Let's just update the JSON meta.name, that's safer and less prone to broken links.
+      const filePath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'diagrams', filename);
       const content = await window.api.readFile(filePath);
       const diagramData = JSON.parse(content);
 
@@ -221,18 +460,23 @@ export const useVaultStore = create((set, get) => ({
 
       await window.api.writeFile(filePath, JSON.stringify(diagramData, null, 2));
 
-      const updatedDiagrams = currentVault.diagrams.map(d => {
-        if (d.filename === filename) {
-          return { ...d, name: newName, updated_at: diagramData.meta.updated_at };
+      const updatedProjects = currentVault.projects.map(proj => {
+        if (proj.id === projectId) {
+          const updatedDiagrams = proj.diagrams.map(d => {
+            if (d.filename === filename) {
+              return { ...d, name: newName, updated_at: diagramData.meta.updated_at };
+            }
+            return d;
+          });
+          // Sort ulang berdasarkan update terakhir
+          updatedDiagrams.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+          return { ...proj, diagrams: updatedDiagrams };
         }
-        return d;
+        return proj;
       });
 
-      // Re-sort
-      updatedDiagrams.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-
       set({
-        currentVault: { ...currentVault, diagrams: updatedDiagrams },
+        currentVault: { ...currentVault, projects: updatedProjects },
         isLoading: false
       });
     } catch (error) {
