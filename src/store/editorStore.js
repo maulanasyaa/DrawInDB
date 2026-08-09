@@ -110,23 +110,54 @@ export const useEditorStore = create((set, get) => ({
   },
 
   onConnect: (connection) => {
-    const { tables } = get();
+    const { tables, relationships } = get();
     const sourceTable = tables.find(t => t.id === connection.source);
+    const targetTable = tables.find(t => t.id === connection.target);
     const sourceCol = sourceTable?.data.columns.find(c => c.id === connection.sourceHandle);
+    const targetCol = targetTable?.data.columns.find(c => c.id === connection.targetHandle);
+
+    if (!sourceCol || !targetCol) return;
+
+    let parentCol = null, childCol = null;
+    let childTableId = null;
+
+    if (targetCol.pk && !sourceCol.pk) {
+      parentCol = targetCol;
+      childCol = sourceCol;
+      childTableId = connection.source;
+    } else if (sourceCol.pk && !targetCol.pk) {
+      parentCol = sourceCol;
+      childCol = targetCol;
+      childTableId = connection.target;
+    } else {
+      parentCol = targetCol;
+      childCol = sourceCol;
+      childTableId = connection.source;
+    }
 
     const edge = {
       ...connection,
       id: `edge-${Date.now()}`,
-      label: `fk_${sourceTable?.data.name}_${sourceCol?.name}`,
       type: 'smoothstep',
       animated: false,
-      style: { strokeWidth: 2 }
+      style: { strokeWidth: 1.5 }
     };
 
-    set((state) => ({
-      relationships: addEdge(edge, state.relationships),
+    const updatedTables = tables.map(t => {
+      if (t.id === childTableId) {
+        const updatedCols = t.data.columns.map(c =>
+          c.id === childCol.id ? { ...c, type: parentCol.type, fk: true } : c
+        );
+        return { ...t, data: { ...t.data, columns: updatedCols } };
+      }
+      return t;
+    });
+
+    set({
+      relationships: addEdge(edge, relationships),
+      tables: updatedTables,
       isDirty: true
-    }));
+    });
     get().autoSave();
   },
 

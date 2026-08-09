@@ -166,15 +166,6 @@ function EditorContent() {
     setShowSQLPanel(!showSQLPanel);
   };
 
-  if (isLoading || !diagramMeta) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-base text-muted">
-        Loading diagram...
-      </div>
-    );
-  }
-
-  // To make edges blue when table is selected
   const activeTableId = useEditorStore((state) => state.selectedTableId);
   const edgeArray = useMemo(() => {
     return storeRelationships.map((edge) => ({
@@ -189,6 +180,29 @@ function EditorContent() {
       animated: edge.source === activeTableId || edge.target === activeTableId,
     }));
   }, [storeRelationships, activeTableId]);
+
+  const isValidConnection = useCallback((connection) => {
+    if (connection.source === connection.target) return false;
+
+    const { relationships } = useEditorStore.getState();
+    const edgeExists = relationships.some(
+      (e) =>
+        e.source === connection.source &&
+        e.target === connection.target &&
+        e.sourceHandle === connection.sourceHandle &&
+        e.targetHandle === connection.targetHandle,
+    );
+
+    return !edgeExists;
+  }, []);
+
+  if (isLoading || !diagramMeta) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-base text-muted">
+        Loading diagram...
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-base">
@@ -224,6 +238,8 @@ function EditorContent() {
             snapToGrid={false}
             defaultViewport={useEditorStore.getState().canvasState}
             proOptions={{ hideAttribution: true }}
+            connectionLineType="smoothstep"
+            isValidConnection={isValidConnection}
             className="bg-base"
           >
             <Background
