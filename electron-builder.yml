@@ -1,0 +1,53 @@
+appId: com.drawindb.app
+productName: DrawInDB
+copyright: Copyright © 2026 DrawInDB
+
+directories:
+  output: release/
+  buildResources: build/
+
+files:
+  - dist/**/*
+  - electron/**/*
+  - node_modules/**/*
+  - package.json
+
+# macOS
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  icon: build/icon.icns
+  category: public.app-category.developer-tools
+  darkModeSupport: true
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  title: DrawInDB
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# Windows
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+
+publish: null
