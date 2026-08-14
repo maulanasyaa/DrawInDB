@@ -8,9 +8,10 @@ import EmptyState from "../components/EmptyState";
 import {
   FiArrowRight,
   FiPlus,
-  FiUpload,
   FiArrowLeft,
-  FiFileText,
+  FiEdit2,
+  FiCheck,
+  FiX as FiClose,
 } from "react-icons/fi";
 
 const DB_TYPES = [
@@ -20,9 +21,35 @@ const DB_TYPES = [
   { id: "generic", name: "Generic" },
 ];
 
+// Registry label per diagram type — sumber tunggal
+const TYPE_LABELS = {
+  erd: { singular: "ERD", plural: "ERDs", placeholder: "Auth Schema" },
+  flowchart: {
+    singular: "Flowchart",
+    plural: "Flowcharts",
+    placeholder: "Login Flow",
+  },
+  usecase: {
+    singular: "Use Case Diagram",
+    plural: "Use Case Diagrams",
+    placeholder: "Booking System",
+  },
+};
+
+function getTypeLabel(type) {
+  return (
+    TYPE_LABELS[type] || {
+      singular: type,
+      plural: `${type}s`,
+      placeholder: "Diagram",
+    }
+  );
+}
+
 function NewDiagramModal({ type, onClose, onCreate }) {
   const [name, setName] = useState("");
   const [dbType, setDbType] = useState("mysql");
+  const labels = getTypeLabel(type);
 
   const handleCreate = () => {
     if (name.trim()) onCreate(name.trim(), type === "erd" ? dbType : null);
@@ -33,7 +60,7 @@ function NewDiagramModal({ type, onClose, onCreate }) {
       <div className="bg-surface border border-theme rounded-2xl w-full max-w-md p-10 shadow-2xl animate-pop-in flex flex-col gap-6">
         <div>
           <h2 className="font-display section-title text-primary mb-2">
-            New {type === "erd" ? "ERD" : "Flowchart"}
+            New {labels.singular}
           </h2>
           <p className="text-secondary font-light">
             Create a new diagram in this project.
@@ -50,7 +77,7 @@ function NewDiagramModal({ type, onClose, onCreate }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full bg-base border border-theme rounded-lg px-4 py-3 text-primary focus:outline-none focus:border-focus transition-all"
-            placeholder={`e.g. ${type === "erd" ? "Auth Schema" : "Login Flow"}`}
+            placeholder={`e.g. ${labels.placeholder}`}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           />
         </div>
@@ -101,7 +128,47 @@ export default function DiagramList() {
   const navigate = useNavigate();
   const currentVault = useVaultStore((state) => state.currentVault);
   const createDiagram = useVaultStore((state) => state.createDiagram);
+  const renameDiagram = useVaultStore((state) => state.renameDiagram);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // State untuk rename inline
+  const [renamingFilename, setRenamingFilename] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const startRename = (diagram) => {
+    setRenamingFilename(diagram.filename);
+    setRenameValue(diagram.name);
+  };
+
+  const cancelRename = () => {
+    setRenamingFilename(null);
+    setRenameValue("");
+  };
+
+  const commitRename = async () => {
+    const trimmed = renameValue.trim();
+    if (!trimmed || !renamingFilename) {
+      cancelRename();
+      return;
+    }
+
+    // Kalau nama tidak berubah, batal saja
+    const original = project.diagrams?.find(
+      (d) => d.filename === renamingFilename,
+    );
+    if (original && original.name === trimmed) {
+      cancelRename();
+      return;
+    }
+
+    try {
+      await renameDiagram(projectId, renamingFilename, trimmed);
+    } catch (err) {
+      alert("Failed to rename: " + err.message);
+    } finally {
+      cancelRename();
+    }
+  };
 
   const project = currentVault?.projects?.find((p) => p.id === projectId);
 
@@ -113,8 +180,17 @@ export default function DiagramList() {
     );
   }
 
+  // Fail-safe: kalau type tidak dikenal, redirect balik
+  if (!TYPE_LABELS[type]) {
+    return (
+      <div className="flex h-screen items-center justify-center text-muted">
+        Unknown diagram type: {type}
+      </div>
+    );
+  }
+
+  const labels = getTypeLabel(type);
   const diagrams = project.diagrams?.filter((d) => d.type === type) || [];
-  const typeLabel = type === "erd" ? "ERD" : "Flowchart";
 
   const handleCreateDiagram = async (name, dbType) => {
     try {
@@ -148,10 +224,10 @@ export default function DiagramList() {
             <span className="opacity-30">/</span>
             <span className="text-secondary opacity-80">{project.name}</span>
             <span className="opacity-30">/</span>
-            <span className="text-primary">{typeLabel}s</span>
+            <span className="text-primary">{labels.plural}</span>
           </div>
           <h1 className="font-display section-title text-primary">
-            {typeLabel} Workspace
+            {labels.singular} Workspace
           </h1>
         </div>
 
@@ -169,7 +245,7 @@ export default function DiagramList() {
               </div>
               <div className="flex-1">
                 <h3 className="text-base font-semibold text-primary">
-                  New {typeLabel}
+                  New {labels.singular}
                 </h3>
                 <p className="text-xs text-secondary font-light">
                   Create a blank canvas.
@@ -181,41 +257,104 @@ export default function DiagramList() {
 
         <div className="z-10 relative">
           <h2 className="font-display subsection-title text-primary mb-6">
-            Your {typeLabel}s
+            Your {labels.plural}
           </h2>
           {diagrams.length === 0 ? (
             <div className="premium-card p-16 flex items-center justify-center min-h-[200px]">
               <EmptyState
-                title={`No ${typeLabel}s yet`}
+                title={`No ${labels.plural} yet`}
                 description="Start by creating one above."
               />
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {diagrams.map((diagram) => (
-                <div
-                  key={diagram.filename}
-                  onClick={() =>
-                    navigate(`/editor/${projectId}/${diagram.filename}`)
-                  }
-                  className="group premium-card p-6 cursor-pointer hover-lift flex flex-col h-40 justify-between"
-                >
-                  <div>
-                    {diagram.db_type && (
-                      <span className="text-[9px] px-2 py-0.5 rounded-full border border-theme uppercase font-semibold bg-surface-2 text-primary mb-3 inline-block">
-                        {diagram.db_type}
-                      </span>
+              {diagrams.map((diagram) => {
+                const isRenaming = renamingFilename === diagram.filename;
+
+                return (
+                  <div
+                    key={diagram.filename}
+                    onClick={() => {
+                      if (isRenaming) return;
+                      navigate(`/editor/${projectId}/${diagram.filename}`);
+                    }}
+                    className={`group premium-card p-6 hover-lift flex flex-col h-40 justify-between relative ${
+                      isRenaming
+                        ? "cursor-default ring-1 ring-focus"
+                        : "cursor-pointer"
+                    }`}
+                  >
+                    {/* Tombol Edit — muncul saat hover, hanya kalau tidak sedang rename */}
+                    {!isRenaming && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRename(diagram);
+                        }}
+                        className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-muted hover:text-primary hover:bg-surface-2 rounded-md opacity-0 group-hover:opacity-100 transition-all z-10"
+                        title="Rename diagram"
+                      >
+                        <FiEdit2 className="text-xs" />
+                      </button>
                     )}
-                    <h3 className="font-display text-lg text-primary line-clamp-1">
-                      {diagram.name}
-                    </h3>
+
+                    <div>
+                      {diagram.db_type && (
+                        <span className="text-[9px] px-2 py-0.5 rounded-full border border-theme uppercase font-semibold bg-surface-2 text-primary mb-3 inline-block">
+                          {diagram.db_type}
+                        </span>
+                      )}
+
+                      {isRenaming ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === "Enter") commitRename();
+                              else if (e.key === "Escape") cancelRename();
+                            }}
+                            className="flex-1 min-w-0 bg-base border border-focus rounded-md px-2 py-1 text-lg font-display text-primary outline-none"
+                          />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              commitRename();
+                            }}
+                            className="w-7 h-7 flex items-center justify-center text-success hover:bg-success/10 rounded-md transition-colors shrink-0"
+                            title="Save"
+                          >
+                            <FiCheck />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              cancelRename();
+                            }}
+                            className="w-7 h-7 flex items-center justify-center text-muted hover:text-danger hover:bg-danger/10 rounded-md transition-colors shrink-0"
+                            title="Cancel"
+                          >
+                            <FiClose />
+                          </button>
+                        </div>
+                      ) : (
+                        <h3 className="font-display text-lg text-primary line-clamp-1">
+                          {diagram.name}
+                        </h3>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted font-light flex justify-between items-center mt-auto">
+                      {DateTime.fromISO(diagram.updated_at).toRelative()}
+                      {!isRenaming && (
+                        <FiArrowRight className="opacity-0 group-hover:opacity-100 transition-opacity text-accent text-lg" />
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted font-light flex justify-between items-center mt-auto">
-                    {DateTime.fromISO(diagram.updated_at).toRelative()}
-                    <FiArrowRight className="opacity-0 group-hover:opacity-100 transition-opacity text-accent text-lg" />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

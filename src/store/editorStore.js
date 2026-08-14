@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 import { applyNodeChanges, applyEdgeChanges, addEdge } from 'reactflow';
+import {
+  USECASE_NODE_TYPES,
+  USECASE_REL_TYPES,
+  USECASE_DEFAULT_SIZES,
+  USECASE_DEFAULT_LABELS,
+} from '../config/useCaseTypes';
+
+// Helper: diagram type ini pakai `nodes` + `flowEdges` (bukan `tables` + `relationships`)
+const isNodeBasedType = (type) => type === 'flowchart' || type === 'usecase';
 
 export const useEditorStore = create((set, get) => ({
   diagramMeta: null,
@@ -16,11 +25,13 @@ export const useEditorStore = create((set, get) => ({
   _projectId: null,
   _filename: null,
 
-  // Timer untuk auto-save
+  // State khusus Use Case: relationship type yang aktif untuk koneksi baru
+  usecaseRelType: USECASE_REL_TYPES.ASSOCIATION,
+  setUseCaseRelType: (relType) => set({ usecaseRelType: relType }),
+
   _autoSaveTimer: null,
 
   autoSave: () => {
-    // Debounce: Tunggu 1.5 detik setelah user berhenti mengubah sesuatu sebelum auto-save
     if (get()._autoSaveTimer) clearTimeout(get()._autoSaveTimer);
     const timer = setTimeout(() => {
       if (get().isDirty) get().saveDiagram();
@@ -42,7 +53,6 @@ export const useEditorStore = create((set, get) => ({
 
       set({
         diagramMeta: data.meta,
-        // PERBAIKAN ERD: Pastikan semua data tabel lama otomatis diset sebagai tipe 'table'
         tables: (data.tables || []).map(t => ({ ...t, type: 'table' })),
         relationships: data.relationships || [],
         nodes: data.nodes || [],
@@ -87,7 +97,7 @@ export const useEditorStore = create((set, get) => ({
     const { tables } = get();
     const newTable = {
       id: `table-${Date.now()}`,
-      type: 'table', // Penanda wajib untuk React Flow
+      type: 'table',
       position,
       data: { name: 'new_table', columns: [] }
     };
@@ -103,13 +113,13 @@ export const useEditorStore = create((set, get) => ({
       case 'terminal': height = 56; label = 'Start'; break;
       case 'decision': width = 160; height = 160; label = 'Decision'; break;
       case 'io': label = 'Input/Output'; break;
-      case 'database': width = 140; height = 80; label = 'Database'; break; // Bentuk Baru
+      case 'database': width = 140; height = 80; label = 'Database'; break;
       case 'document': height = 70; label = 'Document'; break;
       case 'predefined': label = 'Sub-process'; break;
-      case 'loop': width = 160; height = 64; label = 'Loop'; break; // Bentuk Baru
+      case 'loop': width = 160; height = 64; label = 'Loop'; break;
       case 'connector': width = 40; height = 40; label = ''; break;
       case 'offpage': width = 100; height = 80; label = '1'; break;
-      case 'annotation': width = 140; label = ''; break; // Annotation tidak perlu limit height
+      case 'annotation': width = 140; label = ''; break;
     }
 
     const newNode = {
@@ -124,7 +134,40 @@ export const useEditorStore = create((set, get) => ({
     get().autoSave();
   },
 
-  // Fungsi baru untuk memastikan teks tersimpan ke global state
+  // === USE CASE: tambah node ===
+  addUseCaseNode: (subtype, position) => {
+    const { nodes } = get();
+    const size = USECASE_DEFAULT_SIZES[subtype] || { width: 160, height: 80 };
+    const label = USECASE_DEFAULT_LABELS[subtype] ?? '';
+
+    const newNode = {
+      id: `uc-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'usecase',
+      position,
+      data: { type: subtype, label },
+      style: { width: size.width, height: size.height },
+    };
+
+    // System Boundary harus di layer paling belakang supaya bisa "menampung" visual
+    if (subtype === USECASE_NODE_TYPES.SYSTEM_BOUNDARY) {
+      set({ nodes: [newNode, ...nodes], isDirty: true });
+    } else {
+      set({ nodes: [...nodes, newNode], isDirty: true });
+    }
+    get().autoSave();
+  },
+
+  // === USE CASE: replace all (untuk import JSON) ===
+  replaceUseCaseGraph: ({ nodes, edges, canvasState }) => {
+    set({
+      nodes: nodes || [],
+      flowEdges: edges || [],
+      canvasState: canvasState || get().canvasState,
+      isDirty: true,
+    });
+    get().autoSave();
+  },
+
   updateNodeData: (id, newData) => {
     const { nodes } = get();
     set({
@@ -135,9 +178,20 @@ export const useEditorStore = create((set, get) => ({
   },
 
   onNodesChange: (changes) => {
-    const isFlowchart = get().diagramMeta?.type === 'flowchart';
-    if (isFlowchart) {
-      set({ nodes: applyNodeChanges(changes, get().nodes), isDirty: true });
+    const type = get().diagramMeta?.type;
+    if (isNodeBasedType(type)) {
+      let nextNodes = applyNodeChanges(changes, get().nodes);
+
+      // Cleanup edges kalau node dihapus (khusus use case, karena edges pakai flowEdges)
+      const removed = changes.filter(c => c.type === 'remove').map(c => c.id);
+      let nextEdges = get().flowEdges;
+      if (removed.length > 0) {
+        nextEdges = nextEdges.filter(
+          e => !removed.includes(e.source) && !removed.includes(e.target)
+        );
+      }
+
+      set({ nodes: nextNodes, flowEdges: nextEdges, isDirty: true });
     } else {
       set({ tables: applyNodeChanges(changes, get().tables), isDirty: true });
     }
@@ -145,8 +199,8 @@ export const useEditorStore = create((set, get) => ({
   },
 
   onEdgesChange: (changes) => {
-    const isFlowchart = get().diagramMeta?.type === 'flowchart';
-    if (isFlowchart) {
+    const type = get().diagramMeta?.type;
+    if (isNodeBasedType(type)) {
       set({ flowEdges: applyEdgeChanges(changes, get().flowEdges), isDirty: true });
     } else {
       set({ relationships: applyEdgeChanges(changes, get().relationships), isDirty: true });
@@ -155,8 +209,18 @@ export const useEditorStore = create((set, get) => ({
   },
 
   onConnect: (connection) => {
-    const isFlowchart = get().diagramMeta?.type === 'flowchart';
-    if (isFlowchart) {
+    const type = get().diagramMeta?.type;
+
+    if (type === 'usecase') {
+      const relType = get().usecaseRelType || USECASE_REL_TYPES.ASSOCIATION;
+      const newEdge = {
+        ...connection,
+        id: `uce-${connection.source}-${connection.target}-${Date.now()}`,
+        type: 'usecase',
+        data: { relType },
+      };
+      set({ flowEdges: addEdge(newEdge, get().flowEdges), isDirty: true });
+    } else if (type === 'flowchart') {
       const sourceNode = get().nodes.find(n => n.id === connection.source);
       let edgeLabel = '';
 

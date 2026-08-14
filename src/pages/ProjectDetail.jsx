@@ -2,7 +2,7 @@ import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useVaultStore } from "../store/vaultStore";
-import { FiDatabase, FiGitBranch, FiArrowLeft } from "react-icons/fi";
+import { FiDatabase, FiGitBranch, FiArrowLeft, FiUsers } from "react-icons/fi";
 
 export default function ProjectDetail() {
   const { projectId } = useParams();
@@ -56,7 +56,6 @@ export default function ProjectDetail() {
         animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-5xl mx-auto px-10 py-12 h-full flex flex-col relative z-10"
       >
-        {/* Breadcrumb & Header */}
         <div className="flex flex-col mb-16">
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-2">
@@ -81,7 +80,6 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* Diagram Type Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {renderCard(
             "ERD",
@@ -94,6 +92,12 @@ export default function ProjectDetail() {
             "flowchart",
             "Map out process logic, decision flows, and algorithms step-by-step.",
             <FiGitBranch />,
+          )}
+          {renderCard(
+            "Use Case Diagram",
+            "usecase",
+            "Model actors, system functions, and their relationships using standard UML notation.",
+            <FiUsers />,
           )}
         </div>
       </motion.div>

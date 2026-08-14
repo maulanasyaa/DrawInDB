@@ -16,13 +16,23 @@ import { useEditorStore } from "../store/editorStore";
 import EditorHeader from "../components/editor/EditorHeader";
 import Sidebar from "../components/editor/Sidebar";
 import FlowchartSidebar from "../components/editor/FlowchartSidebar";
+import UseCaseSidebar from "../components/editor/UseCaseSidebar";
 import TableNode from "../components/editor/TableNode";
 import FlowchartNode from "../components/editor/FlowchartNode";
+import UseCaseNode from "../components/editor/UseCaseNode";
+import UseCaseEdge from "../components/editor/UseCaseEdge";
 import LoadingSpinner from "../components/LoadingSpinner";
+
+import UseCaseMarkers from "../components/editor/UseCaseMarkers";
 
 const nodeTypes = {
   table: TableNode,
   flowchart: FlowchartNode,
+  usecase: UseCaseNode,
+};
+
+const edgeTypes = {
+  usecase: UseCaseEdge,
 };
 
 function EditorContent() {
@@ -50,11 +60,15 @@ function EditorContent() {
   const onConnect = useEditorStore((state) => state.onConnect);
   const addTable = useEditorStore((state) => state.addTable);
   const addFlowNode = useEditorStore((state) => state.addFlowNode);
+  const addUseCaseNode = useEditorStore((state) => state.addUseCaseNode);
   const updateCanvas = useEditorStore((state) => state.updateCanvas);
 
   const setSelectedTable = useEditorStore((state) => state.setSelectedTable);
 
-  const isFlowchart = diagramMeta?.type === "flowchart";
+  const diagramType = diagramMeta?.type;
+  const isFlowchart = diagramType === "flowchart";
+  const isUseCase = diagramType === "usecase";
+  const isNodeBased = isFlowchart || isUseCase;
 
   useEffect(() => {
     if (!vaultPath) {
@@ -81,7 +95,9 @@ function EditorContent() {
         y: event.clientY - reactFlowBounds.top,
       });
 
-      if (isFlowchart) {
+      if (isUseCase) {
+        addUseCaseNode(type, position);
+      } else if (isFlowchart) {
         addFlowNode(type, position);
       } else {
         if (type === "table") {
@@ -89,23 +105,23 @@ function EditorContent() {
         }
       }
     },
-    [project, addTable, addFlowNode, isFlowchart],
+    [project, addTable, addFlowNode, addUseCaseNode, isFlowchart, isUseCase],
   );
 
   const onNodeClick = useCallback(
     (_, node) => {
-      if (!isFlowchart) {
+      if (!isNodeBased) {
         setSelectedTable(node.id);
       }
     },
-    [setSelectedTable, isFlowchart],
+    [setSelectedTable, isNodeBased],
   );
 
   const onPaneClick = useCallback(() => {
-    if (!isFlowchart) {
+    if (!isNodeBased) {
       setSelectedTable(null);
     }
-  }, [setSelectedTable, isFlowchart]);
+  }, [setSelectedTable, isNodeBased]);
 
   if (isLoading) {
     return (
@@ -115,19 +131,21 @@ function EditorContent() {
     );
   }
 
+  const renderSidebar = () => {
+    if (!isSidebarOpen) return null;
+    if (isUseCase) return <UseCaseSidebar key="usecase-sidebar" />;
+    if (isFlowchart) return <FlowchartSidebar key="flowchart-sidebar" />;
+    return <Sidebar key="erd-sidebar" />;
+  };
+
   return (
     <div className="flex flex-col h-screen w-full bg-canvas text-primary overflow-hidden relative">
       <EditorHeader />
 
       <div className="flex-1 relative flex" ref={reactFlowWrapper}>
-        <AnimatePresence>
-          {isSidebarOpen &&
-            (isFlowchart ? (
-              <FlowchartSidebar key="flowchart-sidebar" />
-            ) : (
-              <Sidebar key="erd-sidebar" />
-            ))}
-        </AnimatePresence>
+        <AnimatePresence>{renderSidebar()}</AnimatePresence>
+
+        {isUseCase && <UseCaseMarkers />}
 
         {isFlowchart && (
           <div className="absolute bottom-6 left-150 -translate-x-1/2 z-40 bg-surface border border-theme px-5 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs text-secondary animate-fade-in pointer-events-none">
@@ -142,15 +160,30 @@ function EditorContent() {
           </div>
         )}
 
+        {isUseCase && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-theme px-5 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs text-secondary animate-fade-in pointer-events-none max-w-[560px]">
+            <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-accent">
+              <FiInfo className="text-sm" />
+            </div>
+            <span>
+              <strong className="text-primary font-medium">Tips:</strong> Pick a
+              relationship type in the sidebar, then drag from a node handle to
+              another node.
+            </span>
+          </div>
+        )}
+
         <ReactFlow
-          nodes={isFlowchart ? nodes : tables}
-          edges={isFlowchart ? flowEdges : relationships}
+          nodes={isNodeBased ? nodes : tables}
+          edges={isNodeBased ? flowEdges : relationships}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
-          defaultEdgeOptions={{ type: "smoothstep" }}
+          defaultEdgeOptions={
+            isUseCase ? { type: "usecase" } : { type: "smoothstep" }
+          }
           onInit={(instance) => {
             instance.setViewport({
               x: canvasState.x || 0,
@@ -164,8 +197,11 @@ function EditorContent() {
           onDragOver={onDragOver}
           onDrop={onDrop}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           minZoom={0.1}
           maxZoom={2}
+          snapToGrid
+          snapGrid={[12, 12]}
           className="bg-canvas"
         >
           <Background color="#555" gap={24} size={1} />
