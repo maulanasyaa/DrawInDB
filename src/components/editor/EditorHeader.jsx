@@ -13,18 +13,7 @@ import {
   parseUseCaseImport,
 } from "../../utils/useCaseJson";
 import { exportDiagramAsImage } from "../../utils/exportImage";
-
-const TYPE_BADGE = {
-  erd: "ERD",
-  flowchart: "FLOWCHART",
-  usecase: "USE CASE",
-};
-
-const TYPE_LABEL_BACK = {
-  erd: "ERD",
-  flowchart: "Flowchart",
-  usecase: "Use Case Diagram",
-};
+import { getDiagramType } from "../../config/diagramTypes";
 
 export default function EditorHeader() {
   const navigate = useNavigate();
@@ -48,8 +37,9 @@ export default function EditorHeader() {
   const isERD = type === "erd";
   const isUseCase = type === "usecase";
   const isFlowchart = type === "flowchart";
-  const badgeText = TYPE_BADGE[type] || type?.toUpperCase();
-  const backLabel = TYPE_LABEL_BACK[type] || type;
+  const typeConfig = getDiagramType(type);
+  const badgeText = typeConfig.badge;
+  const backLabel = typeConfig.backLabel;
 
   const handleExportSQL = () => {
     let sql = `-- Exported from DrawInDB\n-- Diagram: ${diagramMeta.name}\n\n`;
@@ -157,7 +147,7 @@ export default function EditorHeader() {
               {badgeText}
             </span>
 
-            {isERD && diagramMeta.db_type && (
+            {typeConfig.hasDbType && diagramMeta.db_type && (
               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning uppercase tracking-widest select-none">
                 {diagramMeta.db_type}
               </span>
@@ -175,7 +165,7 @@ export default function EditorHeader() {
 
         {/* Export PNG — untuk semua diagram type */}
         {/* Menggunakan operator || (OR) */}
-        {(isERD || isFlowchart) && (
+        {typeConfig.exports.png && (
           <button
             onClick={handleExportImage}
             className="flex items-center gap-2 text-muted hover:text-primary px-3 py-1.5 transition-colors rounded-md hover:bg-surface-2 text-xs font-semibold"
@@ -186,7 +176,7 @@ export default function EditorHeader() {
           </button>
         )}
 
-        {isERD && (
+        {typeConfig.exports.sql && (
           <button
             onClick={handleExportSQL}
             className="flex items-center gap-2 text-muted hover:text-primary px-3 py-1.5 transition-colors rounded-md hover:bg-surface-2 text-xs font-semibold"
@@ -197,7 +187,7 @@ export default function EditorHeader() {
           </button>
         )}
 
-        {isUseCase && (
+        {typeConfig.exports.json && (
           <>
             <input
               ref={fileInputRef}
