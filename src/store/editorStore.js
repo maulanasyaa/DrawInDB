@@ -6,6 +6,7 @@ import {
   USECASE_DEFAULT_SIZES,
   USECASE_DEFAULT_LABELS,
 } from '../config/useCaseTypes';
+import { useToastStore } from './toastStore';
 
 // Helper: diagram type ini pakai `nodes` + `flowEdges` (bukan `tables` + `relationships`)
 const isNodeBasedType = (type) => type === 'flowchart' || type === 'usecase';
@@ -21,6 +22,7 @@ export const useEditorStore = create((set, get) => ({
   isSidebarOpen: true,
   isDirty: false,
   isLoading: true,
+  loadError: null,
   _vaultPath: null,
   _projectId: null,
   _filename: null,
@@ -30,6 +32,7 @@ export const useEditorStore = create((set, get) => ({
   setUseCaseRelType: (relType) => set({ usecaseRelType: relType }),
 
   _autoSaveTimer: null,
+  _pendingSave: null,
 
   autoSave: () => {
     if (get()._autoSaveTimer) clearTimeout(get()._autoSaveTimer);
@@ -39,8 +42,24 @@ export const useEditorStore = create((set, get) => ({
     set({ _autoSaveTimer: timer });
   },
 
+  markDirty: (vaultPath, projectId, filename) => {
+    const { _pendingSave } = get();
+    // Only capture save context on first dirty mark
+    if (!_pendingSave && vaultPath && projectId && filename) {
+      set({ _pendingSave: { vaultPath, projectId, filename }, isDirty: true });
+    } else {
+      set({ isDirty: true });
+    }
+  },
+
   loadDiagram: async (vaultPath, projectId, filename) => {
-    set({ isLoading: true, _vaultPath: vaultPath, _projectId: projectId, _filename: filename });
+    // Clear any existing auto-save timer before loading new diagram
+    if (get()._autoSaveTimer) {
+      clearTimeout(get()._autoSaveTimer);
+      set({ _autoSaveTimer: null });
+    }
+
+    set({ isLoading: true, loadError: null, _vaultPath: vaultPath, _projectId: projectId, _filename: filename });
     try {
       const filePath = await window.api.pathJoin(vaultPath, 'projects', projectId, 'diagrams', filename);
       const content = await window.api.readFile(filePath);
@@ -61,19 +80,24 @@ export const useEditorStore = create((set, get) => ({
         isLoading: false,
         isDirty: false,
         selectedTableId: null,
+        loadError: null,
       });
     } catch (e) {
       console.error('Failed to load diagram:', e);
-      set({ isLoading: false });
+      const errorMsg = `Failed to load diagram: ${e.message}`;
+      useToastStore.getState().error(errorMsg);
+      set({ isLoading: false, loadError: errorMsg });
     }
   },
 
   saveDiagram: async () => {
-    const { _vaultPath, _projectId, _filename, diagramMeta, tables, relationships, nodes, flowEdges, canvasState, isDirty } = get();
-    if (!_vaultPath || !_projectId || !_filename || !diagramMeta || !isDirty) return;
+    const { _pendingSave, diagramMeta, tables, relationships, nodes, flowEdges, canvasState, isDirty } = get();
+    if (!_pendingSave || !diagramMeta || !isDirty) return;
+
+    const { vaultPath, projectId, filename } = _pendingSave;
 
     try {
-      const filePath = await window.api.pathJoin(_vaultPath, 'projects', _projectId, 'diagrams', _filename);
+      const filePath = await window.api.pathJoin(vaultPath, 'projects', projectId, 'diagrams', filename);
       const updatedMeta = { ...diagramMeta, updated_at: new Date().toISOString() };
 
       const fileData = {
@@ -87,26 +111,27 @@ export const useEditorStore = create((set, get) => ({
       };
 
       await window.api.writeFile(filePath, JSON.stringify(fileData, null, 2));
-      set({ isDirty: false, diagramMeta: updatedMeta });
+      set({ isDirty: false, diagramMeta: updatedMeta, _pendingSave: null });
     } catch (e) {
       console.error('Failed to save diagram:', e);
     }
   },
 
   addTable: (position) => {
-    const { tables } = get();
+    const { tables, _vaultPath, _projectId, _filename } = get();
     const newTable = {
       id: `table-${Date.now()}`,
       type: 'table',
       position,
       data: { name: 'new_table', columns: [] }
     };
-    set({ tables: [...tables, newTable], isDirty: true });
+    set({ tables: [...tables, newTable] });
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   addFlowNode: (type, position) => {
-    const { nodes } = get();
+    const { nodes, _vaultPath, _projectId, _filename } = get();
     let width = 160, height = 64, label = 'Process';
 
     switch(type) {
@@ -130,13 +155,14 @@ export const useEditorStore = create((set, get) => ({
       style: type === 'annotation' ? { width } : { width, height }
     };
 
-    set({ nodes: [...nodes, newNode], isDirty: true });
+    set({ nodes: [...nodes, newNode] });
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   // === USE CASE: tambah node ===
   addUseCaseNode: (subtype, position) => {
-    const { nodes } = get();
+    const { nodes, _vaultPath, _projectId, _filename } = get();
     const size = USECASE_DEFAULT_SIZES[subtype] || { width: 160, height: 80 };
     const label = USECASE_DEFAULT_LABELS[subtype] ?? '';
 
@@ -150,35 +176,38 @@ export const useEditorStore = create((set, get) => ({
 
     // System Boundary harus di layer paling belakang supaya bisa "menampung" visual
     if (subtype === USECASE_NODE_TYPES.SYSTEM_BOUNDARY) {
-      set({ nodes: [newNode, ...nodes], isDirty: true });
+      set({ nodes: [newNode, ...nodes] });
     } else {
-      set({ nodes: [...nodes, newNode], isDirty: true });
+      set({ nodes: [...nodes, newNode] });
     }
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   // === USE CASE: replace all (untuk import JSON) ===
   replaceUseCaseGraph: ({ nodes, edges, canvasState }) => {
+    const { _vaultPath, _projectId, _filename } = get();
     set({
       nodes: nodes || [],
       flowEdges: edges || [],
       canvasState: canvasState || get().canvasState,
-      isDirty: true,
     });
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   updateNodeData: (id, newData) => {
-    const { nodes } = get();
+    const { nodes, _vaultPath, _projectId, _filename } = get();
     set({
       nodes: nodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...newData } } : n),
-      isDirty: true
     });
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   onNodesChange: (changes) => {
-    const type = get().diagramMeta?.type;
+    const { _vaultPath, _projectId, _filename, diagramMeta } = get();
+    const type = diagramMeta?.type;
     if (isNodeBasedType(type)) {
       let nextNodes = applyNodeChanges(changes, get().nodes);
 
@@ -191,25 +220,29 @@ export const useEditorStore = create((set, get) => ({
         );
       }
 
-      set({ nodes: nextNodes, flowEdges: nextEdges, isDirty: true });
+      set({ nodes: nextNodes, flowEdges: nextEdges });
     } else {
-      set({ tables: applyNodeChanges(changes, get().tables), isDirty: true });
+      set({ tables: applyNodeChanges(changes, get().tables) });
     }
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   onEdgesChange: (changes) => {
-    const type = get().diagramMeta?.type;
+    const { _vaultPath, _projectId, _filename, diagramMeta } = get();
+    const type = diagramMeta?.type;
     if (isNodeBasedType(type)) {
-      set({ flowEdges: applyEdgeChanges(changes, get().flowEdges), isDirty: true });
+      set({ flowEdges: applyEdgeChanges(changes, get().flowEdges) });
     } else {
-      set({ relationships: applyEdgeChanges(changes, get().relationships), isDirty: true });
+      set({ relationships: applyEdgeChanges(changes, get().relationships) });
     }
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   onConnect: (connection) => {
-    const type = get().diagramMeta?.type;
+    const { _vaultPath, _projectId, _filename, diagramMeta } = get();
+    const type = diagramMeta?.type;
 
     if (type === 'usecase') {
       const relType = get().usecaseRelType || USECASE_REL_TYPES.ASSOCIATION;
@@ -219,7 +252,7 @@ export const useEditorStore = create((set, get) => ({
         type: 'usecase',
         data: { relType },
       };
-      set({ flowEdges: addEdge(newEdge, get().flowEdges), isDirty: true });
+      set({ flowEdges: addEdge(newEdge, get().flowEdges) });
     } else if (type === 'flowchart') {
       const sourceNode = get().nodes.find(n => n.id === connection.source);
       let edgeLabel = '';
@@ -242,18 +275,45 @@ export const useEditorStore = create((set, get) => ({
         markerEnd: { type: 'arrowclosed', color: '#a1a1aa' }
       };
 
-      set({ flowEdges: addEdge(newEdge, get().flowEdges), isDirty: true });
+      set({ flowEdges: addEdge(newEdge, get().flowEdges) });
     } else {
       const newRel = { ...connection, id: `rel-${Date.now()}` };
-      set({ relationships: addEdge(newRel, get().relationships), isDirty: true });
+      set({ relationships: addEdge(newRel, get().relationships) });
     }
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   updateCanvas: (viewport) => {
-    set({ canvasState: viewport, isDirty: true });
+    const { _vaultPath, _projectId, _filename } = get();
+    set({ canvasState: viewport });
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
-  setSelectedTable: (id) => set({ selectedTableId: id })
+  setSelectedTable: (id) => set({ selectedTableId: id }),
+
+  cleanup: () => {
+    const { _autoSaveTimer } = get();
+    if (_autoSaveTimer) {
+      clearTimeout(_autoSaveTimer);
+    }
+    set({
+      _autoSaveTimer: null,
+      _pendingSave: null,
+      _vaultPath: null,
+      _projectId: null,
+      _filename: null,
+      diagramMeta: null,
+      tables: [],
+      relationships: [],
+      nodes: [],
+      flowEdges: [],
+      canvasState: { x: 0, y: 0, zoom: 1 },
+      isDirty: false,
+      isLoading: false,
+      loadError: null,
+      selectedTableId: null,
+    });
+  }
 }));
