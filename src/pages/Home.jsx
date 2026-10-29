@@ -7,6 +7,7 @@ import { useVaultStore } from "../store/vaultStore";
 import VaultHeader from "../components/VaultHeader";
 import EmptyState from "../components/EmptyState";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { getDiagramType } from "../config/diagramTypes";
 import {
   FiArrowRight,
   FiPlus,
@@ -79,26 +80,25 @@ function ProjectCard({ project, onClick }) {
   // Ambil tipe diagram unik yang ada di dalam project ini
   const uniqueTypes = [...new Set((project.diagrams || []).map((d) => d.type))];
 
+  // Urutkan badge sesuai DIAGRAM_TYPE_LIST (erd, flowchart, usecase)
+  const typeOrder = { erd: 0, flowchart: 1, usecase: 2 };
+  const sortedTypes = uniqueTypes.sort((a, b) => (typeOrder[a] ?? 99) - (typeOrder[b] ?? 99));
+
   return (
     <div
       onClick={onClick}
       className="group relative premium-card p-6 cursor-pointer hover-lift active:scale-[0.98] flex flex-col h-48 justify-between transition-all"
     >
       <div>
-        <div className="flex justify-between items-start mb-4">
-          <span className="text-[10px] px-2 py-0.5 rounded-full border border-theme uppercase font-semibold tracking-wider bg-surface-2 text-primary">
-            {diagramCount} {diagramCount === 1 ? "Diagram" : "Diagrams"}
-          </span>
-          <div className="flex gap-1">
-            {uniqueTypes.map((type) => (
-              <span
-                key={type}
-                className="text-[9px] px-1.5 py-0.5 rounded border border-theme uppercase font-bold tracking-widest bg-base text-muted"
-              >
-                {type === "erd" ? "ERD" : "FLOWCHART"}
-              </span>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0 max-w-full mb-4">
+          {sortedTypes.map((type) => (
+            <span
+              key={type}
+              className="whitespace-nowrap shrink-0 leading-none text-[9px] px-1.5 py-0.5 rounded border border-theme uppercase font-bold tracking-widest bg-base text-muted"
+            >
+              {getDiagramType(type).badge}
+            </span>
+          ))}
         </div>
 
         <h3
@@ -109,9 +109,11 @@ function ProjectCard({ project, onClick }) {
         </h3>
       </div>
 
-      <div className="flex items-end justify-between mt-auto">
-        <div className="text-sm text-muted font-light">{timeAgo}</div>
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-3 text-accent text-xl">
+      <div className="flex items-end justify-between mt-auto whitespace-nowrap">
+        <div className="text-sm text-muted font-light flex items-center gap-2">
+          {diagramCount} {diagramCount === 1 ? "diagram" : "diagrams"} &middot; {timeAgo}
+        </div>
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-3 text-accent text-xl shrink-0">
           <FiArrowRight />
         </div>
       </div>
@@ -121,7 +123,12 @@ function ProjectCard({ project, onClick }) {
 
 // Main Home Component
 function Home() {
-  const navigate = useNavigate();
+  let navigate;
+  try {
+    navigate = useNavigate();
+  } catch {
+    navigate = () => {}; // No-op fallback if used outside Router
+  }
   const {
     currentVault,
     recentVaults,

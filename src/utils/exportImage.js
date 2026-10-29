@@ -1,5 +1,6 @@
 import { getNodesBounds, getViewportForBounds } from "reactflow";
 import { toPng } from "html-to-image";
+import { isErdType } from "../config/diagramTypes";
 
 /**
  * Resolve semua CSS custom properties di SVG menjadi nilai eksplisit.
@@ -218,13 +219,22 @@ export async function exportDiagramAsImage(nodes, options = {}) {
       filter: (node) => {
   if (!node.classList) return true;
 
-  // Selalu allow edges layer & children-nya
+  // Selalu allow edges layer & children-nya (edge paths, markers, labels)
   if (
     node.classList.contains("react-flow__edges") ||
     node.classList.contains("react-flow__edge") ||
     node.classList.contains("react-flow__edge-path") ||
+    node.classList.contains("react-flow__edge-label") ||
     node.tagName === "marker" ||
-    node.tagName === "defs" ||
+    node.tagName === "defs"
+  ) {
+    return true;
+  }
+
+  // Allow SVG shapes that are part of edges (not nodes)
+  // Node shapes have react-flow__node class on parent, edge shapes don't
+  const isEdgeElement = node.closest?.('.react-flow__edge') !== null;
+  if (isEdgeElement && (
     node.tagName === "path" ||
     node.tagName === "line" ||
     node.tagName === "polygon" ||
@@ -232,7 +242,7 @@ export async function exportDiagramAsImage(nodes, options = {}) {
     node.tagName === "circle" ||
     node.tagName === "ellipse" ||
     node.tagName === "text"
-  ) {
+  )) {
     return true;
   }
 

@@ -6,9 +6,8 @@ import {
   USECASE_DEFAULT_SIZES,
   USECASE_DEFAULT_LABELS,
 } from '../config/useCaseTypes';
-
-// Helper: diagram type ini pakai `nodes` + `flowEdges` (bukan `tables` + `relationships`)
-const isNodeBasedType = (type) => type === 'flowchart' || type === 'usecase';
+import { isGraphType } from '../config/diagramTypes';
+import { useToastStore } from './toastStore';
 
 export const useEditorStore = create((set, get) => ({
   diagramMeta: null,
@@ -21,6 +20,7 @@ export const useEditorStore = create((set, get) => ({
   isSidebarOpen: true,
   isDirty: false,
   isLoading: true,
+  loadError: null,
   _vaultPath: null,
   _projectId: null,
   _filename: null,
@@ -30,6 +30,7 @@ export const useEditorStore = create((set, get) => ({
   setUseCaseRelType: (relType) => set({ usecaseRelType: relType }),
 
   _autoSaveTimer: null,
+  _pendingSave: null,
 
   autoSave: () => {
     if (get()._autoSaveTimer) clearTimeout(get()._autoSaveTimer);
@@ -39,8 +40,24 @@ export const useEditorStore = create((set, get) => ({
     set({ _autoSaveTimer: timer });
   },
 
+  markDirty: (vaultPath, projectId, filename) => {
+    const { _pendingSave } = get();
+    // Only capture save context on first dirty mark
+    if (!_pendingSave && vaultPath && projectId && filename) {
+      set({ _pendingSave: { vaultPath, projectId, filename }, isDirty: true });
+    } else {
+      set({ isDirty: true });
+    }
+  },
+
   loadDiagram: async (vaultPath, projectId, filename) => {
-    set({ isLoading: true, _vaultPath: vaultPath, _projectId: projectId, _filename: filename });
+    // Clear any existing auto-save timer before loading new diagram
+    if (get()._autoSaveTimer) {
+      clearTimeout(get()._autoSaveTimer);
+      set({ _autoSaveTimer: null });
+    }
+
+    set({ isLoading: true, loadError: null, _vaultPath: vaultPath, _projectId: projectId, _filename: filename });
     try {
       const filePath = await window.api.pathJoin(vaultPath, 'projects', projectId, 'diagrams', filename);
       const content = await window.api.readFile(filePath);
@@ -61,19 +78,24 @@ export const useEditorStore = create((set, get) => ({
         isLoading: false,
         isDirty: false,
         selectedTableId: null,
+        loadError: null,
       });
     } catch (e) {
       console.error('Failed to load diagram:', e);
-      set({ isLoading: false });
+      const errorMsg = `Failed to load diagram: ${e.message}`;
+      useToastStore.getState().error(errorMsg);
+      set({ isLoading: false, loadError: errorMsg });
     }
   },
 
   saveDiagram: async () => {
-    const { _vaultPath, _projectId, _filename, diagramMeta, tables, relationships, nodes, flowEdges, canvasState, isDirty } = get();
-    if (!_vaultPath || !_projectId || !_filename || !diagramMeta || !isDirty) return;
+    const { _pendingSave, diagramMeta, tables, relationships, nodes, flowEdges, canvasState, isDirty } = get();
+    if (!_pendingSave || !diagramMeta || !isDirty) return;
+
+    const { vaultPath, projectId, filename } = _pendingSave;
 
     try {
-      const filePath = await window.api.pathJoin(_vaultPath, 'projects', _projectId, 'diagrams', _filename);
+      const filePath = await window.api.pathJoin(vaultPath, 'projects', projectId, 'diagrams', filename);
       const updatedMeta = { ...diagramMeta, updated_at: new Date().toISOString() };
 
       const fileData = {
@@ -87,26 +109,224 @@ export const useEditorStore = create((set, get) => ({
       };
 
       await window.api.writeFile(filePath, JSON.stringify(fileData, null, 2));
-      set({ isDirty: false, diagramMeta: updatedMeta });
+      set({ isDirty: false, diagramMeta: updatedMeta, _pendingSave: null });
     } catch (e) {
       console.error('Failed to save diagram:', e);
     }
   },
 
   addTable: (position) => {
-    const { tables } = get();
+    const { tables, _vaultPath, _projectId, _filename } = get();
     const newTable = {
       id: `table-${Date.now()}`,
       type: 'table',
       position,
       data: { name: 'new_table', columns: [] }
     };
-    set({ tables: [...tables, newTable], isDirty: true });
+    set({ tables: [...tables, newTable] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  // === TABLE: CRUD ========================================================
+  updateTable: (tableId, dataUpdates) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t =>
+        t.id === tableId ? { ...t, data: { ...t.data, ...dataUpdates } } : t
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  deleteTable: (tableId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => {
+      // Find relationships that will be removed (involving the deleted table)
+      const removedRels = state.relationships.filter(
+        e => e.source === tableId || e.target === tableId
+      );
+      const remainingRels = state.relationships.filter(
+        e => e.source !== tableId && e.target !== tableId
+      );
+
+      // For each removed relationship where the target is NOT the deleted table,
+      // check if the target column still has other relationships pointing to it
+      const updatedTables = state.tables
+        .filter(t => t.id !== tableId)
+        .map(t => {
+          let tableChanged = false;
+          const updatedCols = t.data.columns.map(col => {
+            // Check if this column was a target of a removed relationship
+            const wasTargetOfRemoved = removedRels.some(r => r.target === t.id && r.targetHandle === col.id);
+            if (wasTargetOfRemoved && col.fk) {
+              // Check if any remaining relationship still targets this column
+              const stillTargeted = remainingRels.some(r => r.target === t.id && r.targetHandle === col.id);
+              if (!stillTargeted) {
+                tableChanged = true;
+                return { ...col, fk: false };
+              }
+            }
+            return col;
+          });
+          return tableChanged ? { ...t, data: { ...t.data, columns: updatedCols } } : t;
+        });
+
+      return {
+        tables: updatedTables,
+        relationships: remainingRels,
+        selectedTableId: state.selectedTableId === tableId ? null : state.selectedTableId,
+      };
+    });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  duplicateTable: (tableId) => {
+    const { tables, _vaultPath, _projectId, _filename } = get();
+    const tableToClone = tables.find(t => t.id === tableId);
+    if (!tableToClone) return;
+
+    const newTable = {
+      ...tableToClone,
+      id: `table-${Date.now()}`,
+      position: { x: tableToClone.position.x + 50, y: tableToClone.position.y + 50 },
+      data: {
+        ...tableToClone.data,
+        name: `${tableToClone.data.name}_copy`,
+        columns: tableToClone.data.columns.map(c => ({
+          ...c,
+          id: `col-${Date.now()}-${Math.random()}`,
+        })),
+      },
+    };
+
+    set({ tables: [...tables, newTable] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  // === COLUMN: CRUD =======================================================
+  addColumn: (tableId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t => {
+        if (t.id === tableId) {
+          const newCol = {
+            id: `col-${Date.now()}`,
+            name: 'new_column',
+            type: 'VARCHAR',
+            pk: false,
+            fk: false,
+            notNull: false,
+            unique: false,
+          };
+          return { ...t, data: { ...t.data, columns: [...t.data.columns, newCol] } };
+        }
+        return t;
+      }),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  updateColumn: (tableId, columnId, dataUpdates) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t => {
+        if (t.id === tableId) {
+          const updatedColumns = t.data.columns.map(c =>
+            c.id === columnId ? { ...c, ...dataUpdates } : c
+          );
+          return { ...t, data: { ...t.data, columns: updatedColumns } };
+        }
+        return t;
+      }),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  deleteColumn: (tableId, columnId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => {
+      // Also remove relationships tied to this column
+      const newEdges = state.relationships.filter(
+        e =>
+          !(
+            (e.source === tableId && e.sourceHandle === columnId) ||
+            (e.target === tableId && e.targetHandle === columnId)
+          )
+      );
+
+      const newTables = state.tables.map(t => {
+        if (t.id === tableId) {
+          return {
+            ...t,
+            data: { ...t.data, columns: t.data.columns.filter(c => c.id !== columnId) },
+          };
+        }
+        return t;
+      });
+
+      return { tables: newTables, relationships: newEdges };
+    });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  reorderColumns: (tableId, oldIndex, newIndex) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t => {
+        if (t.id === tableId) {
+          const cols = [...t.data.columns];
+          const [moved] = cols.splice(oldIndex, 1);
+          cols.splice(newIndex, 0, moved);
+          return { ...t, data: { ...t.data, columns: cols } };
+        }
+        return t;
+      }),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  toggleTableVisibility: (tableId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t =>
+        t.id === tableId ? { ...t, hidden: !t.hidden } : t
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  // === RELATIONSHIP =======================================================
+  updateRelationshipLabel: (edgeId, label) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      relationships: state.relationships.map(e =>
+        e.id === edgeId ? { ...e, label } : e
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  deleteRelationship: (edgeId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      relationships: state.relationships.filter(e => e.id !== edgeId),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   addFlowNode: (type, position) => {
-    const { nodes } = get();
+    const { nodes, _vaultPath, _projectId, _filename } = get();
     let width = 160, height = 64, label = 'Process';
 
     switch(type) {
@@ -130,13 +350,14 @@ export const useEditorStore = create((set, get) => ({
       style: type === 'annotation' ? { width } : { width, height }
     };
 
-    set({ nodes: [...nodes, newNode], isDirty: true });
+    set({ nodes: [...nodes, newNode] });
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   // === USE CASE: tambah node ===
   addUseCaseNode: (subtype, position) => {
-    const { nodes } = get();
+    const { nodes, _vaultPath, _projectId, _filename } = get();
     const size = USECASE_DEFAULT_SIZES[subtype] || { width: 160, height: 80 };
     const label = USECASE_DEFAULT_LABELS[subtype] ?? '';
 
@@ -150,36 +371,39 @@ export const useEditorStore = create((set, get) => ({
 
     // System Boundary harus di layer paling belakang supaya bisa "menampung" visual
     if (subtype === USECASE_NODE_TYPES.SYSTEM_BOUNDARY) {
-      set({ nodes: [newNode, ...nodes], isDirty: true });
+      set({ nodes: [newNode, ...nodes] });
     } else {
-      set({ nodes: [...nodes, newNode], isDirty: true });
+      set({ nodes: [...nodes, newNode] });
     }
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   // === USE CASE: replace all (untuk import JSON) ===
   replaceUseCaseGraph: ({ nodes, edges, canvasState }) => {
+    const { _vaultPath, _projectId, _filename } = get();
     set({
       nodes: nodes || [],
       flowEdges: edges || [],
       canvasState: canvasState || get().canvasState,
-      isDirty: true,
     });
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   updateNodeData: (id, newData) => {
-    const { nodes } = get();
+    const { nodes, _vaultPath, _projectId, _filename } = get();
     set({
       nodes: nodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...newData } } : n),
-      isDirty: true
     });
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   onNodesChange: (changes) => {
-    const type = get().diagramMeta?.type;
-    if (isNodeBasedType(type)) {
+    const { _vaultPath, _projectId, _filename, diagramMeta } = get();
+    const type = diagramMeta?.type;
+    if (isGraphType(type)) {
       let nextNodes = applyNodeChanges(changes, get().nodes);
 
       // Cleanup edges kalau node dihapus (khusus use case, karena edges pakai flowEdges)
@@ -191,25 +415,64 @@ export const useEditorStore = create((set, get) => ({
         );
       }
 
-      set({ nodes: nextNodes, flowEdges: nextEdges, isDirty: true });
+      set({ nodes: nextNodes, flowEdges: nextEdges });
     } else {
-      set({ tables: applyNodeChanges(changes, get().tables), isDirty: true });
+      set({ tables: applyNodeChanges(changes, get().tables) });
     }
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   onEdgesChange: (changes) => {
-    const type = get().diagramMeta?.type;
-    if (isNodeBasedType(type)) {
-      set({ flowEdges: applyEdgeChanges(changes, get().flowEdges), isDirty: true });
+    const { _vaultPath, _projectId, _filename, diagramMeta } = get();
+    const type = diagramMeta?.type;
+    if (isGraphType(type)) {
+      set({ flowEdges: applyEdgeChanges(changes, get().flowEdges) });
     } else {
-      set({ relationships: applyEdgeChanges(changes, get().relationships), isDirty: true });
+      // ERD: Clean up FK on target column when relationship is removed
+      const removedIds = changes
+        .filter(c => c.type === 'remove')
+        .map(c => c.id);
+      
+      if (removedIds.length > 0) {
+        const currentRelationships = get().relationships;
+        const removedRels = currentRelationships.filter(r => removedIds.includes(r.id));
+        const remainingRels = currentRelationships.filter(r => !removedIds.includes(r.id));
+        
+        // For each removed relationship, check if target column still has other relationships pointing to it
+        const updatedTables = get().tables.map(t => {
+          let tableChanged = false;
+          const updatedCols = t.data.columns.map(col => {
+            // Check if this column was a target of a removed relationship
+            const wasTargetOfRemoved = removedRels.some(r => r.target === t.id && r.targetHandle === col.id);
+            if (wasTargetOfRemoved && col.fk) {
+              // Check if any remaining relationship still targets this column
+              const stillTargeted = remainingRels.some(r => r.target === t.id && r.targetHandle === col.id);
+              if (!stillTargeted) {
+                tableChanged = true;
+                return { ...col, fk: false };
+              }
+            }
+            return col;
+          });
+          return tableChanged ? { ...t, data: { ...t.data, columns: updatedCols } } : t;
+        });
+        
+        set({ 
+          relationships: applyEdgeChanges(changes, currentRelationships),
+          tables: updatedTables
+        });
+      } else {
+        set({ relationships: applyEdgeChanges(changes, get().relationships) });
+      }
     }
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   onConnect: (connection) => {
-    const type = get().diagramMeta?.type;
+    const { _vaultPath, _projectId, _filename, diagramMeta } = get();
+    const type = diagramMeta?.type;
 
     if (type === 'usecase') {
       const relType = get().usecaseRelType || USECASE_REL_TYPES.ASSOCIATION;
@@ -219,7 +482,7 @@ export const useEditorStore = create((set, get) => ({
         type: 'usecase',
         data: { relType },
       };
-      set({ flowEdges: addEdge(newEdge, get().flowEdges), isDirty: true });
+      set({ flowEdges: addEdge(newEdge, get().flowEdges) });
     } else if (type === 'flowchart') {
       const sourceNode = get().nodes.find(n => n.id === connection.source);
       let edgeLabel = '';
@@ -242,18 +505,91 @@ export const useEditorStore = create((set, get) => ({
         markerEnd: { type: 'arrowclosed', color: '#a1a1aa' }
       };
 
-      set({ flowEdges: addEdge(newEdge, get().flowEdges), isDirty: true });
+      set({ flowEdges: addEdge(newEdge, get().flowEdges) });
     } else {
-      const newRel = { ...connection, id: `rel-${Date.now()}` };
-      set({ relationships: addEdge(newRel, get().relationships), isDirty: true });
+      // ERD: Set FK on target column like old version
+      const { tables, relationships } = get();
+      const sourceTable = tables.find(t => t.id === connection.source);
+      const targetTable = tables.find(t => t.id === connection.target);
+      const sourceCol = sourceTable?.data.columns.find(c => c.id === connection.sourceHandle);
+      const targetCol = targetTable?.data.columns.find(c => c.id === connection.targetHandle);
+
+      if (!sourceCol || !targetCol) return;
+
+      let parentCol = null, childCol = null;
+      let childTableId = null;
+
+      if (targetCol.pk && !sourceCol.pk) {
+        parentCol = targetCol;
+        childCol = sourceCol;
+        childTableId = connection.source;
+      } else if (sourceCol.pk && !targetCol.pk) {
+        parentCol = sourceCol;
+        childCol = targetCol;
+        childTableId = connection.target;
+      } else {
+        parentCol = targetCol;
+        childCol = sourceCol;
+        childTableId = connection.source;
+      }
+
+      const edge = {
+        ...connection,
+        id: `rel-${Date.now()}`,
+        type: 'smoothstep',
+        animated: false,
+        style: { strokeWidth: 1.5 }
+      };
+
+      const updatedTables = tables.map(t => {
+        if (t.id === childTableId) {
+          const updatedCols = t.data.columns.map(c =>
+            c.id === childCol.id ? { ...c, type: parentCol.type, fk: true } : c
+          );
+          return { ...t, data: { ...t.data, columns: updatedCols } };
+        }
+        return t;
+      });
+
+      set({
+        relationships: addEdge(edge, relationships),
+        tables: updatedTables,
+      });
     }
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
   updateCanvas: (viewport) => {
-    set({ canvasState: viewport, isDirty: true });
+    const { _vaultPath, _projectId, _filename } = get();
+    set({ canvasState: viewport });
+    get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
-  setSelectedTable: (id) => set({ selectedTableId: id })
+  setSelectedTable: (id) => set({ selectedTableId: id }),
+
+  cleanup: () => {
+    const { _autoSaveTimer } = get();
+    if (_autoSaveTimer) {
+      clearTimeout(_autoSaveTimer);
+    }
+    set({
+      _autoSaveTimer: null,
+      _pendingSave: null,
+      _vaultPath: null,
+      _projectId: null,
+      _filename: null,
+      diagramMeta: null,
+      tables: [],
+      relationships: [],
+      nodes: [],
+      flowEdges: [],
+      canvasState: { x: 0, y: 0, zoom: 1 },
+      isDirty: false,
+      isLoading: false,
+      loadError: null,
+      selectedTableId: null,
+    });
+  }
 }));

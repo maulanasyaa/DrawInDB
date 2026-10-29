@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { DateTime } from 'luxon';
 import { useVaultStore } from '../store/vaultStore';
 import ConfirmDialog from './ConfirmDialog';
+import { getDiagramType } from '../config/diagramTypes';
 
 export default function DiagramCard({ diagram }) {
   const navigate = useNavigate();
@@ -37,6 +38,9 @@ export default function DiagramCard({ diagram }) {
 
   const timeAgo = DateTime.fromISO(diagram.updated_at).toRelative() || 'Just now';
   
+  const diagramType = getDiagramType(diagram.meta?.type);
+  const hasDbType = diagramType.hasDbType && diagram.db_type;
+  
   const typeColorMap = {
     mysql: 'var(--badge-mysql)',
     postgresql: 'var(--badge-postgresql)',
@@ -53,9 +57,11 @@ export default function DiagramCard({ diagram }) {
       >
         <div>
           <div className="flex justify-between items-start mb-4">
-            <span className="text-[10px] px-2 py-0.5 rounded-full border uppercase font-semibold tracking-wider bg-surface-2" style={{ color, borderColor: color }}>
-              {diagram.db_type}
-            </span>
+            {hasDbType && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full border uppercase font-semibold tracking-wider bg-surface-2" style={{ color, borderColor: color }}>
+                {diagram.db_type}
+              </span>
+            )}
           </div>
           
           {isRenaming ? (

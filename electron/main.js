@@ -6,6 +6,25 @@ const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let store;
+let currentVaultPath = null;
+
+// Helper: Validate that a path is within the current vault
+function isPathInVault(targetPath) {
+  if (!currentVaultPath) return false;
+  const resolvedVault = path.resolve(currentVaultPath);
+  const resolvedTarget = path.resolve(targetPath);
+  return resolvedTarget.startsWith(resolvedVault + path.sep) || resolvedTarget === resolvedVault;
+}
+
+// Helper: Throw if path is not within vault
+function assertVaultAccess(targetPath) {
+  // Allow access if no vault is set yet (initial validation before vault is opened)
+  if (!currentVaultPath) return;
+  
+  if (!isPathInVault(targetPath)) {
+    throw new Error('Access denied: Path is outside the current vault');
+  }
+}
 
 // Single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -60,7 +79,14 @@ if (!gotTheLock) {
     // Content Security Policy
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       if (isDev) {
-        callback({ responseHeaders: details.responseHeaders });
+        // Development CSP - allows Vite HMR and local resources
+        const devCsp = "default-src 'self' 'unsafe-eval' 'unsafe-inline' http://localhost:5173 ws://localhost:5173; script-src 'self' 'unsafe-eval' 'unsafe-inline' http://localhost:5173; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://localhost:5173 ws://localhost:5173;";
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Content-Security-Policy': [devCsp]
+          }
+        });
         return;
       }
 
@@ -122,15 +148,18 @@ if (!gotTheLock) {
   });
 
   ipcMain.handle('fs:readFile', async (event, filePath) => {
+    assertVaultAccess(filePath);
     return fs.promises.readFile(filePath, 'utf-8');
   });
 
   ipcMain.handle('fs:writeFile', async (event, filePath, content) => {
+    assertVaultAccess(filePath);
     await fs.promises.writeFile(filePath, content, 'utf-8');
     return true;
   });
 
   ipcMain.handle('fs:listFiles', async (event, dirPath) => {
+    assertVaultAccess(dirPath);
     try {
       const files = await fs.promises.readdir(dirPath, { withFileTypes: true });
       return files.map(file => ({ name: file.name, isDirectory: file.isDirectory() }));
@@ -140,21 +169,26 @@ if (!gotTheLock) {
   });
 
   ipcMain.handle('fs:mkdir', async (event, dirPath) => {
+    assertVaultAccess(dirPath);
     await fs.promises.mkdir(dirPath, { recursive: true });
     return true;
   });
 
   ipcMain.handle('fs:deleteFile', async (event, filePath) => {
+    assertVaultAccess(filePath);
     await fs.promises.unlink(filePath);
     return true;
   });
 
   ipcMain.handle('fs:renameFile', async (event, oldPath, newPath) => {
+    assertVaultAccess(oldPath);
+    assertVaultAccess(newPath);
     await fs.promises.rename(oldPath, newPath);
     return true;
   });
 
   ipcMain.handle('fs:pathExists', async (event, checkPath) => {
+    assertVaultAccess(checkPath);
     try {
       await fs.promises.access(checkPath);
       return true;
@@ -180,12 +214,19 @@ if (!gotTheLock) {
 
   ipcMain.handle('store:saveRecentVault', async (event, vaultPath) => {
     if (!store) return;
+    currentVaultPath = vaultPath; // Track current vault for path validation
     const recent = store.get('recentVaults') || [];
     if (!recent.includes(vaultPath)) {
       recent.unshift(vaultPath);
       // Keep only last 10
       store.set('recentVaults', recent.slice(0, 10));
     }
+    return true;
+  });
+
+  // Allow renderer to explicitly set current vault path
+  ipcMain.handle('vault:setCurrentPath', (event, vaultPath) => {
+    currentVaultPath = vaultPath;
     return true;
   });
 }
