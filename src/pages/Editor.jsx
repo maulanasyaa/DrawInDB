@@ -12,6 +12,7 @@ import { AnimatePresence } from "framer-motion";
 
 import { useVaultStore } from "../store/vaultStore";
 import { useEditorStore } from "../store/editorStore";
+import { isGraphType } from "../config/diagramTypes";
 
 import EditorHeader from "../components/editor/EditorHeader";
 import Sidebar from "../components/editor/Sidebar";
@@ -68,7 +69,7 @@ function EditorContent() {
   const diagramType = diagramMeta?.type;
   const isFlowchart = diagramType === "flowchart";
   const isUseCase = diagramType === "usecase";
-  const isNodeBased = isFlowchart || isUseCase;
+  const isNodeBased = isGraphType(diagramType);
 
   const cleanup = useEditorStore((state) => state.cleanup);
 
