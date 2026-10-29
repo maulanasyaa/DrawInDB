@@ -9,6 +9,9 @@ export const useVaultStore = create((set, get) => ({
   openVault: async (folderPath) => {
     set({ isLoading: true, error: null });
     try {
+      // Set vault path FIRST before any file operations to pass vault access validation
+      await window.api.setCurrentVaultPath(folderPath);
+      
       const configPath = await window.api.pathJoin(folderPath, '.drawindb', 'config.json');
       const exists = await window.api.pathExists(configPath);
 
@@ -19,43 +22,54 @@ export const useVaultStore = create((set, get) => ({
       const configStr = await window.api.readFile(configPath);
       const config = JSON.parse(configStr);
 
-      // AUTO-MIGRATION LOGIC (Legacy ke struktur Project)
-      const legacyDiagramsPath = await window.api.pathJoin(folderPath, 'diagrams');
-      const legacyExists = await window.api.pathExists(legacyDiagramsPath);
-      const projectsPath = await window.api.pathJoin(folderPath, 'projects');
+      // Skip migration if already done
+      if (config.migrated) {
+        // proceed to load projects
+      } else {
+        // AUTO-MIGRATION LOGIC (Legacy ke struktur Project)
+        const legacyDiagramsPath = await window.api.pathJoin(folderPath, 'diagrams');
+        const legacyExists = await window.api.pathExists(legacyDiagramsPath);
+        const projectsPath = await window.api.pathJoin(folderPath, 'projects');
 
-      if (!await window.api.pathExists(projectsPath)) {
-        await window.api.mkdir(projectsPath);
-      }
+        if (!await window.api.pathExists(projectsPath)) {
+          await window.api.mkdir(projectsPath);
+        }
 
-      if (legacyExists) {
-        const legacyFiles = await window.api.listFiles(legacyDiagramsPath);
-        const legacyDiagrams = legacyFiles.filter(f => !f.isDirectory && f.name.endsWith('.json'));
+        if (legacyExists) {
+          const legacyFiles = await window.api.listFiles(legacyDiagramsPath);
+          const legacyDiagrams = legacyFiles.filter(f => !f.isDirectory && f.name.endsWith('.json'));
 
-        if (legacyDiagrams.length > 0) {
-          // Buat Default Project
-          const defaultProjId = `proj_${Date.now()}`;
-          const defaultProjPath = await window.api.pathJoin(projectsPath, defaultProjId);
-          await window.api.mkdir(defaultProjPath);
-          await window.api.mkdir(await window.api.pathJoin(defaultProjPath, 'diagrams'));
+          if (legacyDiagrams.length > 0) {
+            // Buat Default Project
+            const defaultProjId = `proj_${Date.now()}`;
+            const defaultProjPath = await window.api.pathJoin(projectsPath, defaultProjId);
+            await window.api.mkdir(defaultProjPath);
+            await window.api.mkdir(await window.api.pathJoin(defaultProjPath, 'diagrams'));
 
-          // Simpan metadata project
-          await window.api.writeFile(
-            await window.api.pathJoin(defaultProjPath, 'project.json'),
-            JSON.stringify({ id: defaultProjId, name: "Default Project", createdAt: new Date().toISOString() })
-          );
+            // Simpan metadata project
+            await window.api.writeFile(
+              await window.api.pathJoin(defaultProjPath, 'project.json'),
+              JSON.stringify({ id: defaultProjId, name: "Default Project", createdAt: new Date().toISOString() })
+            );
 
-          // Pindahkan file lama ke dalam struktur baru
-          for (const file of legacyDiagrams) {
-            const oldPath = await window.api.pathJoin(legacyDiagramsPath, file.name);
-            const newPath = await window.api.pathJoin(defaultProjPath, 'diagrams', file.name);
-            const content = await window.api.readFile(oldPath);
-            const parsed = JSON.parse(content);
-            parsed.meta.projectId = defaultProjId;
-            parsed.meta.type = 'erd'; // Set eksplisit ERD untuk file lama
-            await window.api.writeFile(newPath, JSON.stringify(parsed, null, 2));
-            await window.api.deleteFile(oldPath);
+            // Pindahkan file lama ke dalam struktur baru
+            for (const file of legacyDiagrams) {
+              const oldPath = await window.api.pathJoin(legacyDiagramsPath, file.name);
+              const newPath = await window.api.pathJoin(defaultProjPath, 'diagrams', file.name);
+              const content = await window.api.readFile(oldPath);
+              const parsed = JSON.parse(content);
+              parsed.meta.projectId = defaultProjId;
+              parsed.meta.type = 'erd'; // Set eksplisit ERD untuk file lama
+              await window.api.writeFile(newPath, JSON.stringify(parsed, null, 2));
+              await window.api.deleteFile(oldPath);
+            }
           }
+        }
+
+        // Mark migration as complete
+        if (!config.migrated) {
+          config.migrated = true;
+          await window.api.writeFile(configPath, JSON.stringify(config, null, 2));
         }
       }
 
@@ -99,6 +113,7 @@ export const useVaultStore = create((set, get) => ({
       }
 
       await window.api.saveRecentVault(folderPath);
+      await window.api.setCurrentVaultPath(folderPath);
       set({
         currentVault: { path: folderPath, name: config.vault_name, projects },
         isLoading: false
@@ -261,6 +276,9 @@ export const useVaultStore = create((set, get) => ({
   createVault: async (folderPath) => {
     set({ isLoading: true, error: null });
     try {
+      // Set vault path FIRST before any file operations to pass vault access validation
+      await window.api.setCurrentVaultPath(folderPath);
+      
       const drawindbPath = await window.api.pathJoin(folderPath, '.drawindb');
       const diagramsPath = await window.api.pathJoin(folderPath, 'diagrams');
 
@@ -344,7 +362,11 @@ export const useVaultStore = create((set, get) => ({
 
       const updatedProjects = currentVault.projects.filter(p => p.id !== projectId);
 
-      set({ currentVault: { ...currentVault, projects: updatedProjects }, isLoading: false });
+      const updatedVault = { ...currentVault, projects: updatedProjects };
+      set({ currentVault: updatedVault, isLoading: false });
+
+      // Persist updated vault to recent vaults
+      await window.api.saveRecentVault(currentVault.path);
     } catch (error) {
       set({ error: error.message, isLoading: false });
     }
