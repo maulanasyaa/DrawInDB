@@ -70,6 +70,8 @@ function EditorContent() {
   const isUseCase = diagramType === "usecase";
   const isNodeBased = isFlowchart || isUseCase;
 
+  const cleanup = useEditorStore((state) => state.cleanup);
+
   useEffect(() => {
     if (!vaultPath) {
       navigate("/");
@@ -77,6 +79,13 @@ function EditorContent() {
     }
     loadDiagram(vaultPath, projectId, filename);
   }, [vaultPath, projectId, filename, navigate, loadDiagram]);
+
+  // Cleanup on unmount or before loading new diagram
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, [cleanup]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();

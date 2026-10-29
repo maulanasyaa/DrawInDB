@@ -121,7 +121,12 @@ function ProjectCard({ project, onClick }) {
 
 // Main Home Component
 function Home() {
-  const navigate = useNavigate();
+  let navigate;
+  try {
+    navigate = useNavigate();
+  } catch {
+    navigate = () => {}; // No-op fallback if used outside Router
+  }
   const {
     currentVault,
     recentVaults,
