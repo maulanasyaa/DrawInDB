@@ -12,5 +12,6 @@ contextBridge.exposeInMainWorld('api', {
   pathJoin: (...paths) => ipcRenderer.invoke('path:join', ...paths),
   getRecentVaults: () => ipcRenderer.invoke('store:getRecentVaults'),
   saveRecentVault: (vaultPath) => ipcRenderer.invoke('store:saveRecentVault', vaultPath),
+  setCurrentVaultPath: (vaultPath) => ipcRenderer.invoke('vault:setCurrentPath', vaultPath),
   setWindowTitle: (title) => ipcRenderer.invoke('window:setTitle', title),
 });
