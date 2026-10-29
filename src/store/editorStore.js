@@ -6,10 +6,8 @@ import {
   USECASE_DEFAULT_SIZES,
   USECASE_DEFAULT_LABELS,
 } from '../config/useCaseTypes';
+import { isGraphType } from '../config/diagramTypes';
 import { useToastStore } from './toastStore';
-
-// Helper: diagram type ini pakai `nodes` + `flowEdges` (bukan `tables` + `relationships`)
-const isNodeBasedType = (type) => type === 'flowchart' || type === 'usecase';
 
 export const useEditorStore = create((set, get) => ({
   diagramMeta: null,
@@ -130,6 +128,203 @@ export const useEditorStore = create((set, get) => ({
     get().autoSave();
   },
 
+  // === TABLE: CRUD ========================================================
+  updateTable: (tableId, dataUpdates) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t =>
+        t.id === tableId ? { ...t, data: { ...t.data, ...dataUpdates } } : t
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  deleteTable: (tableId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => {
+      // Find relationships that will be removed (involving the deleted table)
+      const removedRels = state.relationships.filter(
+        e => e.source === tableId || e.target === tableId
+      );
+      const remainingRels = state.relationships.filter(
+        e => e.source !== tableId && e.target !== tableId
+      );
+
+      // For each removed relationship where the target is NOT the deleted table,
+      // check if the target column still has other relationships pointing to it
+      const updatedTables = state.tables
+        .filter(t => t.id !== tableId)
+        .map(t => {
+          let tableChanged = false;
+          const updatedCols = t.data.columns.map(col => {
+            // Check if this column was a target of a removed relationship
+            const wasTargetOfRemoved = removedRels.some(r => r.target === t.id && r.targetHandle === col.id);
+            if (wasTargetOfRemoved && col.fk) {
+              // Check if any remaining relationship still targets this column
+              const stillTargeted = remainingRels.some(r => r.target === t.id && r.targetHandle === col.id);
+              if (!stillTargeted) {
+                tableChanged = true;
+                return { ...col, fk: false };
+              }
+            }
+            return col;
+          });
+          return tableChanged ? { ...t, data: { ...t.data, columns: updatedCols } } : t;
+        });
+
+      return {
+        tables: updatedTables,
+        relationships: remainingRels,
+        selectedTableId: state.selectedTableId === tableId ? null : state.selectedTableId,
+      };
+    });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  duplicateTable: (tableId) => {
+    const { tables, _vaultPath, _projectId, _filename } = get();
+    const tableToClone = tables.find(t => t.id === tableId);
+    if (!tableToClone) return;
+
+    const newTable = {
+      ...tableToClone,
+      id: `table-${Date.now()}`,
+      position: { x: tableToClone.position.x + 50, y: tableToClone.position.y + 50 },
+      data: {
+        ...tableToClone.data,
+        name: `${tableToClone.data.name}_copy`,
+        columns: tableToClone.data.columns.map(c => ({
+          ...c,
+          id: `col-${Date.now()}-${Math.random()}`,
+        })),
+      },
+    };
+
+    set({ tables: [...tables, newTable] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  // === COLUMN: CRUD =======================================================
+  addColumn: (tableId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t => {
+        if (t.id === tableId) {
+          const newCol = {
+            id: `col-${Date.now()}`,
+            name: 'new_column',
+            type: 'VARCHAR',
+            pk: false,
+            fk: false,
+            notNull: false,
+            unique: false,
+          };
+          return { ...t, data: { ...t.data, columns: [...t.data.columns, newCol] } };
+        }
+        return t;
+      }),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  updateColumn: (tableId, columnId, dataUpdates) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t => {
+        if (t.id === tableId) {
+          const updatedColumns = t.data.columns.map(c =>
+            c.id === columnId ? { ...c, ...dataUpdates } : c
+          );
+          return { ...t, data: { ...t.data, columns: updatedColumns } };
+        }
+        return t;
+      }),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  deleteColumn: (tableId, columnId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => {
+      // Also remove relationships tied to this column
+      const newEdges = state.relationships.filter(
+        e =>
+          !(
+            (e.source === tableId && e.sourceHandle === columnId) ||
+            (e.target === tableId && e.targetHandle === columnId)
+          )
+      );
+
+      const newTables = state.tables.map(t => {
+        if (t.id === tableId) {
+          return {
+            ...t,
+            data: { ...t.data, columns: t.data.columns.filter(c => c.id !== columnId) },
+          };
+        }
+        return t;
+      });
+
+      return { tables: newTables, relationships: newEdges };
+    });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  reorderColumns: (tableId, oldIndex, newIndex) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t => {
+        if (t.id === tableId) {
+          const cols = [...t.data.columns];
+          const [moved] = cols.splice(oldIndex, 1);
+          cols.splice(newIndex, 0, moved);
+          return { ...t, data: { ...t.data, columns: cols } };
+        }
+        return t;
+      }),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  toggleTableVisibility: (tableId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      tables: state.tables.map(t =>
+        t.id === tableId ? { ...t, hidden: !t.hidden } : t
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  // === RELATIONSHIP =======================================================
+  updateRelationshipLabel: (edgeId, label) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      relationships: state.relationships.map(e =>
+        e.id === edgeId ? { ...e, label } : e
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  deleteRelationship: (edgeId) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    set((state) => ({
+      relationships: state.relationships.filter(e => e.id !== edgeId),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
   addFlowNode: (type, position) => {
     const { nodes, _vaultPath, _projectId, _filename } = get();
     let width = 160, height = 64, label = 'Process';
@@ -208,7 +403,7 @@ export const useEditorStore = create((set, get) => ({
   onNodesChange: (changes) => {
     const { _vaultPath, _projectId, _filename, diagramMeta } = get();
     const type = diagramMeta?.type;
-    if (isNodeBasedType(type)) {
+    if (isGraphType(type)) {
       let nextNodes = applyNodeChanges(changes, get().nodes);
 
       // Cleanup edges kalau node dihapus (khusus use case, karena edges pakai flowEdges)
@@ -231,10 +426,45 @@ export const useEditorStore = create((set, get) => ({
   onEdgesChange: (changes) => {
     const { _vaultPath, _projectId, _filename, diagramMeta } = get();
     const type = diagramMeta?.type;
-    if (isNodeBasedType(type)) {
+    if (isGraphType(type)) {
       set({ flowEdges: applyEdgeChanges(changes, get().flowEdges) });
     } else {
-      set({ relationships: applyEdgeChanges(changes, get().relationships) });
+      // ERD: Clean up FK on target column when relationship is removed
+      const removedIds = changes
+        .filter(c => c.type === 'remove')
+        .map(c => c.id);
+      
+      if (removedIds.length > 0) {
+        const currentRelationships = get().relationships;
+        const removedRels = currentRelationships.filter(r => removedIds.includes(r.id));
+        const remainingRels = currentRelationships.filter(r => !removedIds.includes(r.id));
+        
+        // For each removed relationship, check if target column still has other relationships pointing to it
+        const updatedTables = get().tables.map(t => {
+          let tableChanged = false;
+          const updatedCols = t.data.columns.map(col => {
+            // Check if this column was a target of a removed relationship
+            const wasTargetOfRemoved = removedRels.some(r => r.target === t.id && r.targetHandle === col.id);
+            if (wasTargetOfRemoved && col.fk) {
+              // Check if any remaining relationship still targets this column
+              const stillTargeted = remainingRels.some(r => r.target === t.id && r.targetHandle === col.id);
+              if (!stillTargeted) {
+                tableChanged = true;
+                return { ...col, fk: false };
+              }
+            }
+            return col;
+          });
+          return tableChanged ? { ...t, data: { ...t.data, columns: updatedCols } } : t;
+        });
+        
+        set({ 
+          relationships: applyEdgeChanges(changes, currentRelationships),
+          tables: updatedTables
+        });
+      } else {
+        set({ relationships: applyEdgeChanges(changes, get().relationships) });
+      }
     }
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -277,8 +507,54 @@ export const useEditorStore = create((set, get) => ({
 
       set({ flowEdges: addEdge(newEdge, get().flowEdges) });
     } else {
-      const newRel = { ...connection, id: `rel-${Date.now()}` };
-      set({ relationships: addEdge(newRel, get().relationships) });
+      // ERD: Set FK on target column like old version
+      const { tables, relationships } = get();
+      const sourceTable = tables.find(t => t.id === connection.source);
+      const targetTable = tables.find(t => t.id === connection.target);
+      const sourceCol = sourceTable?.data.columns.find(c => c.id === connection.sourceHandle);
+      const targetCol = targetTable?.data.columns.find(c => c.id === connection.targetHandle);
+
+      if (!sourceCol || !targetCol) return;
+
+      let parentCol = null, childCol = null;
+      let childTableId = null;
+
+      if (targetCol.pk && !sourceCol.pk) {
+        parentCol = targetCol;
+        childCol = sourceCol;
+        childTableId = connection.source;
+      } else if (sourceCol.pk && !targetCol.pk) {
+        parentCol = sourceCol;
+        childCol = targetCol;
+        childTableId = connection.target;
+      } else {
+        parentCol = targetCol;
+        childCol = sourceCol;
+        childTableId = connection.source;
+      }
+
+      const edge = {
+        ...connection,
+        id: `rel-${Date.now()}`,
+        type: 'smoothstep',
+        animated: false,
+        style: { strokeWidth: 1.5 }
+      };
+
+      const updatedTables = tables.map(t => {
+        if (t.id === childTableId) {
+          const updatedCols = t.data.columns.map(c =>
+            c.id === childCol.id ? { ...c, type: parentCol.type, fk: true } : c
+          );
+          return { ...t, data: { ...t.data, columns: updatedCols } };
+        }
+        return t;
+      });
+
+      set({
+        relationships: addEdge(edge, relationships),
+        tables: updatedTables,
+      });
     }
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
