@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useVaultStore } from "../store/vaultStore";
 import EmptyState from "../components/EmptyState";
+import { getDiagramType, DIAGRAM_TYPES } from "../config/diagramTypes";
 import {
   FiArrowRight,
   FiPlus,
@@ -21,38 +22,13 @@ const DB_TYPES = [
   { id: "generic", name: "Generic" },
 ];
 
-// Registry label per diagram type — sumber tunggal
-const TYPE_LABELS = {
-  erd: { singular: "ERD", plural: "ERDs", placeholder: "Auth Schema" },
-  flowchart: {
-    singular: "Flowchart",
-    plural: "Flowcharts",
-    placeholder: "Login Flow",
-  },
-  usecase: {
-    singular: "Use Case Diagram",
-    plural: "Use Case Diagrams",
-    placeholder: "Booking System",
-  },
-};
-
-function getTypeLabel(type) {
-  return (
-    TYPE_LABELS[type] || {
-      singular: type,
-      plural: `${type}s`,
-      placeholder: "Diagram",
-    }
-  );
-}
-
 function NewDiagramModal({ type, onClose, onCreate }) {
   const [name, setName] = useState("");
   const [dbType, setDbType] = useState("mysql");
-  const labels = getTypeLabel(type);
+  const diagramType = getDiagramType(type);
 
   const handleCreate = () => {
-    if (name.trim()) onCreate(name.trim(), type === "erd" ? dbType : null);
+    if (name.trim()) onCreate(name.trim(), diagramType.hasDbType ? dbType : null);
   };
 
   return createPortal(
@@ -60,7 +36,7 @@ function NewDiagramModal({ type, onClose, onCreate }) {
       <div className="bg-surface border border-theme rounded-2xl w-full max-w-md p-10 shadow-2xl animate-pop-in flex flex-col gap-6">
         <div>
           <h2 className="font-display section-title text-primary mb-2">
-            New {labels.singular}
+            New {diagramType.label}
           </h2>
           <p className="text-secondary font-light">
             Create a new diagram in this project.
@@ -77,12 +53,12 @@ function NewDiagramModal({ type, onClose, onCreate }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full bg-base border border-theme rounded-lg px-4 py-3 text-primary focus:outline-none focus:border-focus transition-all"
-            placeholder={`e.g. ${labels.placeholder}`}
+            placeholder={`e.g. ${diagramType.placeholder}`}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           />
         </div>
 
-        {type === "erd" && (
+        {diagramType.hasDbType && (
           <div className="flex flex-col gap-3">
             <label className="text-sm font-medium text-primary">
               Database Engine
@@ -181,7 +157,7 @@ export default function DiagramList() {
   }
 
   // Fail-safe: kalau type tidak dikenal, redirect balik
-  if (!TYPE_LABELS[type]) {
+  if (!DIAGRAM_TYPES[type]) {
     return (
       <div className="flex h-screen items-center justify-center text-muted">
         Unknown diagram type: {type}
@@ -189,7 +165,7 @@ export default function DiagramList() {
     );
   }
 
-  const labels = getTypeLabel(type);
+  const diagramType = getDiagramType(type);
   const diagrams = project.diagrams?.filter((d) => d.type === type) || [];
 
   const handleCreateDiagram = async (name, dbType) => {
@@ -224,10 +200,10 @@ export default function DiagramList() {
             <span className="opacity-30">/</span>
             <span className="text-secondary opacity-80">{project.name}</span>
             <span className="opacity-30">/</span>
-            <span className="text-primary">{labels.plural}</span>
+            <span className="text-primary">{diagramType.labelPlural}</span>
           </div>
           <h1 className="font-display section-title text-primary">
-            {labels.singular} Workspace
+            {diagramType.label} Workspace
           </h1>
         </div>
 
@@ -245,7 +221,7 @@ export default function DiagramList() {
               </div>
               <div className="flex-1">
                 <h3 className="text-base font-semibold text-primary">
-                  New {labels.singular}
+                  New {diagramType.label}
                 </h3>
                 <p className="text-xs text-secondary font-light">
                   Create a blank canvas.
@@ -257,12 +233,12 @@ export default function DiagramList() {
 
         <div className="z-10 relative">
           <h2 className="font-display subsection-title text-primary mb-6">
-            Your {labels.plural}
+            Your {diagramType.labelPlural}
           </h2>
           {diagrams.length === 0 ? (
             <div className="premium-card p-16 flex items-center justify-center min-h-[200px]">
               <EmptyState
-                title={`No ${labels.plural} yet`}
+                title={`No ${diagramType.labelPlural} yet`}
                 description="Start by creating one above."
               />
             </div>

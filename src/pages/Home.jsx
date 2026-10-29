@@ -7,6 +7,7 @@ import { useVaultStore } from "../store/vaultStore";
 import VaultHeader from "../components/VaultHeader";
 import EmptyState from "../components/EmptyState";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { getDiagramType } from "../config/diagramTypes";
 import {
   FiArrowRight,
   FiPlus,
@@ -95,7 +96,7 @@ function ProjectCard({ project, onClick }) {
                 key={type}
                 className="text-[9px] px-1.5 py-0.5 rounded border border-theme uppercase font-bold tracking-widest bg-base text-muted"
               >
-                {type === "erd" ? "ERD" : "FLOWCHART"}
+                {getDiagramType(type).badge}
               </span>
             ))}
           </div>

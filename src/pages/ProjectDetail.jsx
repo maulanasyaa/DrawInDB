@@ -2,7 +2,8 @@ import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useVaultStore } from "../store/vaultStore";
-import { FiDatabase, FiGitBranch, FiArrowLeft, FiUsers } from "react-icons/fi";
+import { FiArrowLeft } from "react-icons/fi";
+import { DIAGRAM_TYPE_LIST } from "../config/diagramTypes";
 
 export default function ProjectDetail() {
   const { projectId } = useParams();
@@ -21,32 +22,6 @@ export default function ProjectDetail() {
 
   const handleCardClick = (type) => {
     navigate(`/project/${projectId}/${type}`);
-  };
-
-  const renderCard = (title, type, description, icon) => {
-    const diagramCount =
-      project.diagrams?.filter((d) => d.type === type).length || 0;
-    const status = `${diagramCount} ${diagramCount === 1 ? "diagram" : "diagrams"} created`;
-
-    return (
-      <div
-        onClick={() => handleCardClick(type)}
-        className="group premium-card p-8 cursor-pointer hover-lift active:scale-[0.98] transition-all flex flex-col h-full"
-      >
-        <div className="w-14 h-14 rounded-2xl bg-surface-2 border border-theme text-primary flex items-center justify-center text-2xl shadow-sm group-hover:border-focus transition-all mb-6">
-          {icon}
-        </div>
-        <h3 className="text-xl font-display font-semibold text-primary mb-2">
-          {title}
-        </h3>
-        <p className="text-sm text-secondary font-light mb-8 flex-1 leading-relaxed">
-          {description}
-        </p>
-        <div className="text-[10px] font-semibold text-muted uppercase tracking-widest pt-4 border-t border-theme/50">
-          {status}
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -81,24 +56,33 @@ export default function ProjectDetail() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {renderCard(
-            "ERD",
-            "erd",
-            "Design your database schema, establish relationships, and generate SQL.",
-            <FiDatabase />,
-          )}
-          {renderCard(
-            "Flowchart",
-            "flowchart",
-            "Map out process logic, decision flows, and algorithms step-by-step.",
-            <FiGitBranch />,
-          )}
-          {renderCard(
-            "Use Case Diagram",
-            "usecase",
-            "Model actors, system functions, and their relationships using standard UML notation.",
-            <FiUsers />,
-          )}
+          {DIAGRAM_TYPE_LIST.map((diagramType) => {
+            const diagramCount =
+              project.diagrams?.filter((d) => d.type === diagramType.id).length || 0;
+            const status = `${diagramCount} ${diagramCount === 1 ? "diagram" : "diagrams"} created`;
+            const Icon = diagramType.icon;
+
+            return (
+              <div
+                key={diagramType.id}
+                onClick={() => handleCardClick(diagramType.id)}
+                className="group premium-card p-8 cursor-pointer hover-lift active:scale-[0.98] transition-all flex flex-col h-full"
+              >
+                <div className="w-14 h-14 rounded-2xl bg-surface-2 border border-theme text-primary flex items-center justify-center text-2xl shadow-sm group-hover:border-focus transition-all mb-6">
+                  <Icon />
+                </div>
+                <h3 className="text-xl font-display font-semibold text-primary mb-2">
+                  {diagramType.label}
+                </h3>
+                <p className="text-sm text-secondary font-light mb-8 flex-1 leading-relaxed">
+                  {diagramType.description}
+                </p>
+                <div className="text-[10px] font-semibold text-muted uppercase tracking-widest pt-4 border-t border-theme/50">
+                  {status}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </motion.div>
     </div>
