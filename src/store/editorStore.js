@@ -28,6 +28,37 @@ function clearOrphanFk(tables, removedRels, remainingRels) {
   });
 }
 
+/** Batas entri per stack history. */
+const HISTORY_LIMIT = 100;
+/** Jendela penggabungan ketikan (satu snapshot per burst). */
+const HISTORY_TYPING_MS = 500;
+
+/** Snapshot data diagram saja — selection, viewport, dan meta tidak ikut. */
+function captureSnapshot(s) {
+  return {
+    tables: s.tables,
+    relationships: s.relationships,
+    nodes: s.nodes,
+    flowEdges: s.flowEdges,
+  };
+}
+
+/** Dorong snapshot ke stack; stack lama dipotong dari depan. */
+function pushStack(stack, snap) {
+  const next = [...stack, snap];
+  return next.length > HISTORY_LIMIT ? next.slice(next.length - HISTORY_LIMIT) : next;
+}
+
+/**
+ * Snapshot awal burst ketikan yang masih menggantung. Null bila tidak ada
+ * burst aktif. Disimpan sebagai variabel modul (bukan state) supaya perubahan
+ * internal tidak memicu render.
+ */
+let _burstSnapshot = null;
+
+/** True selama satu gestur drag node berjalan (satu entri history per drag). */
+let _dragInProgress = false;
+
 export const useEditorStore = create((set, get) => ({
   diagramMeta: null,
   tables: [],
@@ -50,6 +81,95 @@ export const useEditorStore = create((set, get) => ({
 
   _autoSaveTimer: null,
   _pendingSave: null,
+
+  // === HISTORY undo/redo =================================================
+  // Snapshot hanya di memori; tidak pernah ditulis ke file diagram.
+  historyPast: [],
+  historyFuture: [],
+  _historyTimer: null,
+
+  canUndo: () => get().historyPast.length > 0,
+  canRedo: () => get().historyFuture.length > 0,
+
+  /**
+   * Catat state SEBELUM mutasi masuk history.
+   * - 'action': satu snapshot langsung (add/delete/connect/reorder/resize).
+   * - 'typing': digabung dalam burst 500 ms (satu snapshot per burst).
+   * - 'flush' : tutup burst yang menggantung sekarang.
+   * `flush` selalu mengosongkan stack future (aksi baru membatalkan redo).
+   */
+  commitHistory: (mode = 'action') => {
+    const { _historyTimer } = get();
+    if (_historyTimer) {
+      clearTimeout(_historyTimer);
+      set({ _historyTimer: null });
+    }
+    if (mode === 'flush') {
+      // Burst menggantung: snapshot awal burst (bukan state sekarang) yang
+      // harus masuk stack, supaya undo buru-buru tetap mengembalikan sebelum
+      // burst dimulai. Tanpa burst, tidak ada yang dicatat.
+      if (!_burstSnapshot) return;
+      const pending = _burstSnapshot;
+      _burstSnapshot = null;
+      set((state) => ({
+        historyPast: pushStack(state.historyPast, pending),
+        historyFuture: [],
+      }));
+      return;
+    }
+    if (mode === 'typing') {
+      // Satu burst = satu entri. Snapshot diambil dari state SEBELUM ketikan
+      // pertama burst; commit berikutnya dalam jendela 500 ms hanya
+      // memperpanjang timer.
+      const snap = _burstSnapshot ?? captureSnapshot(get());
+      _burstSnapshot = snap;
+      set({ _historyTimer: setTimeout(() => {
+        _burstSnapshot = null;
+        set((state) => ({ historyPast: pushStack(state.historyPast, snap), historyFuture: [] }));
+        set({ _historyTimer: null });
+      }, HISTORY_TYPING_MS) });
+      return;
+    }
+    // Mode 'action': satu entri per aksi.
+    set((state) => ({ historyPast: pushStack(state.historyPast, captureSnapshot(state)), historyFuture: [] }));
+  },
+
+  _restoreSnapshot: (snap) => {
+    // Undo/redo membatalkan gestur drag yang sedang berjalan.
+    _dragInProgress = false;
+    set({ tables: snap.tables, relationships: snap.relationships, nodes: snap.nodes, flowEdges: snap.flowEdges });
+    const { _vaultPath, _projectId, _filename } = get();
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  undo: () => {
+    // Ketikan yang belum jatuh tempo harus jadi entri dulu, kalau tidak undo
+    // pertama hanya mengulang keadaan terkini.
+    if (get()._historyTimer) get().commitHistory('flush');
+    const { historyPast } = get();
+    if (historyPast.length === 0) return;
+    const target = historyPast[historyPast.length - 1];
+    const current = captureSnapshot(get());
+    set((state) => ({
+      historyPast: state.historyPast.slice(0, -1),
+      historyFuture: pushStack(state.historyFuture, current),
+    }));
+    get()._restoreSnapshot(target);
+  },
+
+  redo: () => {
+    if (get()._historyTimer) get().commitHistory('flush');
+    const { historyFuture } = get();
+    if (historyFuture.length === 0) return;
+    const target = historyFuture[historyFuture.length - 1];
+    const current = captureSnapshot(get());
+    set((state) => ({
+      historyFuture: state.historyFuture.slice(0, -1),
+      historyPast: pushStack(state.historyPast, current),
+    }));
+    get()._restoreSnapshot(target);
+  },
 
   autoSave: () => {
     if (get()._autoSaveTimer) clearTimeout(get()._autoSaveTimer);
@@ -75,6 +195,7 @@ export const useEditorStore = create((set, get) => ({
       clearTimeout(get()._autoSaveTimer);
       set({ _autoSaveTimer: null });
     }
+    get().resetHistory();
 
     set({ isLoading: true, loadError: null, _vaultPath: vaultPath, _projectId: projectId, _filename: filename });
     try {
@@ -142,6 +263,7 @@ export const useEditorStore = create((set, get) => ({
       position,
       data: { name: 'new_table', columns: [] }
     };
+    get().commitHistory('action');
     set({ tables: [...tables, newTable] });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -150,6 +272,7 @@ export const useEditorStore = create((set, get) => ({
   // === TABLE: CRUD ========================================================
   updateTable: (tableId, dataUpdates) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
     set((state) => ({
       tables: state.tables.map(t =>
         t.id === tableId ? { ...t, data: { ...t.data, ...dataUpdates } } : t
@@ -161,6 +284,7 @@ export const useEditorStore = create((set, get) => ({
 
   deleteTable: (tableId) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => {
       // Find relationships that will be removed (involving the deleted table)
       const removedRels = state.relationships.filter(
@@ -203,6 +327,7 @@ export const useEditorStore = create((set, get) => ({
       },
     };
 
+    get().commitHistory('action');
     set({ tables: [...tables, newTable] });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -211,6 +336,7 @@ export const useEditorStore = create((set, get) => ({
   // === COLUMN: CRUD =======================================================
   addColumn: (tableId) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => ({
       tables: state.tables.map(t => {
         if (t.id === tableId) {
@@ -234,6 +360,7 @@ export const useEditorStore = create((set, get) => ({
 
   updateColumn: (tableId, columnId, dataUpdates) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
     set((state) => ({
       tables: state.tables.map(t => {
         if (t.id === tableId) {
@@ -251,6 +378,7 @@ export const useEditorStore = create((set, get) => ({
 
   deleteColumn: (tableId, columnId) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => {
       // Also remove relationships tied to this column
       const isTied = e =>
@@ -280,6 +408,7 @@ export const useEditorStore = create((set, get) => ({
 
   reorderColumns: (tableId, oldIndex, newIndex) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => ({
       tables: state.tables.map(t => {
         if (t.id === tableId) {
@@ -297,6 +426,7 @@ export const useEditorStore = create((set, get) => ({
 
   toggleTableVisibility: (tableId) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => ({
       tables: state.tables.map(t =>
         t.id === tableId ? { ...t, hidden: !t.hidden } : t
@@ -309,6 +439,7 @@ export const useEditorStore = create((set, get) => ({
   // === RELATIONSHIP =======================================================
   updateRelationshipLabel: (edgeId, label) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
     set((state) => ({
       relationships: state.relationships.map(e =>
         e.id === edgeId ? { ...e, label } : e
@@ -320,6 +451,7 @@ export const useEditorStore = create((set, get) => ({
 
   deleteRelationship: (edgeId) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => {
       const removedRels = state.relationships.filter(e => e.id === edgeId);
       const remainingRels = state.relationships.filter(e => e.id !== edgeId);
@@ -357,6 +489,7 @@ export const useEditorStore = create((set, get) => ({
       style: type === 'annotation' ? { width } : { width, height }
     };
 
+    get().commitHistory('action');
     set({ nodes: [...nodes, newNode] });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -380,6 +513,7 @@ export const useEditorStore = create((set, get) => ({
     if (subtype === USECASE_NODE_TYPES.SYSTEM_BOUNDARY) {
       set({ nodes: [newNode, ...nodes] });
     } else {
+    get().commitHistory('action');
       set({ nodes: [...nodes, newNode] });
     }
     get().markDirty(_vaultPath, _projectId, _filename);
@@ -389,6 +523,7 @@ export const useEditorStore = create((set, get) => ({
   // === USE CASE: replace all (untuk import JSON) ===
   replaceUseCaseGraph: ({ nodes, edges, canvasState }) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set({
       nodes: nodes || [],
       flowEdges: edges || [],
@@ -400,6 +535,7 @@ export const useEditorStore = create((set, get) => ({
 
   updateNodeData: (id, newData) => {
     const { nodes, _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
     set({
       nodes: nodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...newData } } : n),
     });
@@ -410,6 +546,25 @@ export const useEditorStore = create((set, get) => ({
   onNodesChange: (changes) => {
     const { _vaultPath, _projectId, _filename, diagramMeta } = get();
     const type = diagramMeta?.type;
+    // Klasifikasi batch SEBELUM state diubah, supaya snapshot history berisi
+    // keadaan sebelum perubahan. Selection/kosmetik tidak masuk history.
+    // React Flow menandai geseran gestur dengan `dragging: true` pada change
+    // `position`, bukan dengan `type: 'drag'`.
+    const isDragging = changes.some(c => c.dragging === true);
+    const hasPosition = changes.some(c => c.type === 'position');
+    if (isDragging) {
+      // Satu entri per drag: change berikutnya dalam gestur yang sama
+      // dilewati sampai gestur berakhir (tidak lagi membawa `dragging`).
+      if (!_dragInProgress) {
+        _dragInProgress = true;
+        get().commitHistory('action');
+      }
+    } else if (changes.some(c => c.type === 'remove' || c.type === 'add' || c.type === 'dimensions')) {
+      _dragInProgress = false;
+      get().commitHistory('action');
+    } else if (!hasPosition && changes.length > 0) {
+      return; // selection / position_info saja: bukan perubahan bermakna
+    }
     if (isGraphType(type)) {
       let nextNodes = applyNodeChanges(changes, get().nodes);
 
@@ -433,6 +588,10 @@ export const useEditorStore = create((set, get) => ({
   onEdgesChange: (changes) => {
     const { _vaultPath, _projectId, _filename, diagramMeta } = get();
     const type = diagramMeta?.type;
+    // Hanya hapus edge yang mengubah data; selection edge tidak masuk history
+    // dan tidak menandai dirty.
+    if (!changes.some(c => c.type === 'remove')) return;
+    get().commitHistory('action');
     if (isGraphType(type)) {
       set({ flowEdges: applyEdgeChanges(changes, get().flowEdges) });
     } else {
@@ -461,6 +620,9 @@ export const useEditorStore = create((set, get) => ({
   onConnect: (connection) => {
     const { _vaultPath, _projectId, _filename, diagramMeta } = get();
     const type = diagramMeta?.type;
+    // Snapshot diambil sebelum cabang mana pun mengubah state; baru dipakai
+    // bila koneksi valid (cabang ERD bisa batal).
+    const preConnect = captureSnapshot(get());
 
     if (type === 'usecase') {
       const relType = get().usecaseRelType || USECASE_REL_TYPES.ASSOCIATION;
@@ -544,6 +706,8 @@ export const useEditorStore = create((set, get) => ({
         tables: updatedTables,
       });
     }
+    // Satu snapshot per koneksi (setelah kemungkinan batal di cabang ERD).
+    set((state) => ({ historyPast: pushStack(state.historyPast, preConnect), historyFuture: [] }));
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
@@ -557,11 +721,20 @@ export const useEditorStore = create((set, get) => ({
 
   setSelectedTable: (id) => set({ selectedTableId: id }),
 
+  /** Buang seluruh history (dipakai loadDiagram + cleanup). */
+  resetHistory: () => {
+    if (get()._historyTimer) clearTimeout(get()._historyTimer);
+    _burstSnapshot = null;
+    _dragInProgress = false;
+    set({ historyPast: [], historyFuture: [], _historyTimer: null });
+  },
+
   cleanup: () => {
     const { _autoSaveTimer } = get();
     if (_autoSaveTimer) {
       clearTimeout(_autoSaveTimer);
     }
+    get().resetHistory();
     set({
       _autoSaveTimer: null,
       _pendingSave: null,
