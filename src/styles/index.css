@@ -235,8 +235,11 @@ button, input, select, a, .interactive {
   transform: translateZ(0);
   will-change: transform, opacity;
 }
+/* Nilai lama .15 diturunkan untuk menambal mix-blend-multiply yang gagal di
+   latar gelap. Blend sudah dibuang, jadi dark justru butuh opasitas lebih
+   tinggi agar glow tetap terlihat. */
 :root[data-theme="dark"] .orb {
-  opacity: 0.15;
+  opacity: 0.35;
 }
 .orb-mint { background: radial-gradient(circle, rgba(167,243,208,0.8) 0%, rgba(167,243,208,0) 70%); }
 .orb-peach { background: radial-gradient(circle, rgba(253,186,116,0.8) 0%, rgba(253,186,116,0) 70%); }
