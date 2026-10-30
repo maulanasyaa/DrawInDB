@@ -48,6 +48,37 @@ function fixture(dbType) {
 
 const sql = (dbType) => generateSQL(fixture(dbType));
 
+// Baseline diambil dari generator sebelum perbaikan (git HEAD 07aa897).
+const MYSQL_SNAPSHOT = `CREATE TABLE \`users\` (
+  \`id\` INTEGER NOT NULL AUTO_INCREMENT,
+  \`email\` VARCHAR(255) UNIQUE,
+  PRIMARY KEY (\`id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE \`orders\` (
+  \`id\` INTEGER NOT NULL AUTO_INCREMENT,
+  \`user_id\` INTEGER NOT NULL,
+  PRIMARY KEY (\`id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE \`orders\` ADD CONSTRAINT \`fk_orders_user_id\` FOREIGN KEY (\`user_id\`) REFERENCES \`users\` (\`id\`);
+`;
+
+const GENERIC_SNAPSHOT = `CREATE TABLE users (
+  id INTEGER NOT NULL,
+  email VARCHAR(255) UNIQUE,
+  PRIMARY KEY (id)
+);
+
+CREATE TABLE orders (
+  id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE orders ADD CONSTRAINT fk_orders_user_id FOREIGN KEY (user_id) REFERENCES users (id);
+`;
+
 describe('sqlGenerator — MySQL', () => {
   const out = sql('mysql');
 
@@ -79,12 +110,10 @@ describe('sqlGenerator — PostgreSQL', () => {
     expect(out).toContain('"id" SERIAL PRIMARY KEY');
   });
 
-  // BUG (belum diperbaiki): cabang "track PK untuk constraint terpisah" di
-  // sqlGenerator.js:61 lupa mengecualikan PK SERIAL, sehingga output memuat
-  // `"id" SERIAL PRIMARY KEY` DAN `PRIMARY KEY ("id")` sekaligus. PostgreSQL
-  // menolak DDL tersebut ("multiple primary keys for table"). Kode lama sama
-  // rusak — bukan regresi P0.
-  it.fails('tidak menggandakan PRIMARY KEY setelah SERIAL inline', () => {
+  // Diperbaiki: PK tunggal SERIAL sudah inline, jadi tidak boleh ditambahkan
+  // lagi sebagai constraint `PRIMARY KEY ("id")` (PG menolak DDL tersebut:
+  // "multiple primary keys for table").
+  it('tidak menggandakan PRIMARY KEY setelah SERIAL inline', () => {
     expect(out).not.toMatch(/PRIMARY KEY \("id"\)/);
   });
 
@@ -120,8 +149,8 @@ describe('sqlGenerator — SQLite', () => {
   });
 
   it('FK inline REFERENCES, tanpa ALTER TABLE', () => {
-    // FK SQLite dibahas di blok "bug terverifikasi": generator saat ini
-    // tidak pernah menuliskannya. Yang dikunci di sini: tidak ada ALTER TABLE.
+    // FK SQLite ditulis inline (dibahas di blok "FK inline & PK"). Kata
+    // `FOREIGN KEY` tetap tidak muncul karena SQLite memakai `REFERENCES`.
     expect(out).not.toContain('ALTER TABLE');
     expect(out).not.toContain('FOREIGN KEY');
   });
@@ -174,18 +203,102 @@ describe('sqlGenerator — Generic', () => {
   });
 });
 
-describe('sqlGenerator — bug terverifikasi', () => {
-  // BUG: `getSQLiteInlineFK` mencari relasi dengan `r.target === tableData.id`,
-  // tapi `generateTableSQL` menerima `table.data` (tanpa field `id`) dari
-  // `generateSQL`. Akibatnya kondisi tak pernah cocok dan SQL SQLite untuk
-  // diagram apa pun tidak pernah memuat FOREIGN KEY. Kode lama sama rusak —
-  // bukan regresi P0. Pecah kondisi jadi `find(...)` murni + `it`.
-  it.fails('SQLite menulis FOREIGN KEY inline untuk kolom FK', () => {
+describe('sqlGenerator — FK inline & PK', () => {
+  // Diperbaiki: `getSQLiteInlineFK` dulu membandingkan `r.target` dengan
+  // `tableData.id` (undefined, karena `generateSQL` mengirim `table.data`),
+  // sehingga FOREIGN KEY SQLite tak pernah ditulis. Sekarang id tabel
+  // diteruskan terpisah dari `table.data`.
+  it('SQLite menulis FOREIGN KEY inline untuk kolom FK', () => {
     expect(sql('sqlite')).toContain('REFERENCES users(id)');
+  });
+
+  it('SQLite: 2 relasi ke 2 tabel sumber berbeda, keduanya inline', () => {
+    const out = generateSQL({
+      meta: { db_type: 'sqlite' },
+      tables: [
+        {
+          id: 'users',
+          data: {
+            name: 'users',
+            columns: [
+              { id: 'users.id', name: 'id', type: 'INTEGER', pk: true, fk: false, notNull: false, unique: false },
+            ],
+          },
+        },
+        {
+          id: 'products',
+          data: {
+            name: 'products',
+            columns: [
+              { id: 'products.id', name: 'id', type: 'INTEGER', pk: true, fk: false, notNull: false, unique: false },
+              { id: 'products.sku', name: 'sku', type: 'TEXT', pk: false, fk: false, notNull: false, unique: true },
+            ],
+          },
+        },
+        {
+          id: 'orders',
+          data: {
+            name: 'orders',
+            columns: [
+              { id: 'orders.id', name: 'id', type: 'INTEGER', pk: true, fk: false, notNull: false, unique: false },
+              { id: 'orders.user_id', name: 'user_id', type: 'INTEGER', pk: false, fk: true, notNull: true, unique: false },
+              { id: 'orders.sku', name: 'sku', type: 'TEXT', pk: false, fk: true, notNull: false, unique: false },
+            ],
+          },
+        },
+      ],
+      relationships: [
+        { id: 'rel-u', source: 'users', sourceHandle: 'users.id', target: 'orders', targetHandle: 'orders.user_id' },
+        { id: 'rel-p', source: 'products', sourceHandle: 'products.sku', target: 'orders', targetHandle: 'orders.sku' },
+      ],
+    });
+
+    expect(out).toContain('user_id INTEGER NOT NULL REFERENCES users(id)');
+    expect(out).toContain('sku TEXT REFERENCES products(sku)');
+    // PK tabel anak tidak dapat REFERENCES
+    expect(out).toContain('id INTEGER PRIMARY KEY AUTOINCREMENT');
+    expect(out).not.toContain('ALTER TABLE');
+  });
+
+  it('PostgreSQL: composite PK pakai constraint terpisah, tanpa SERIAL inline', () => {
+    const out = generateSQL({
+      meta: { db_type: 'postgresql' },
+      tables: [
+        {
+          id: 'memberships',
+          data: {
+            name: 'memberships',
+            columns: [
+              { id: 'memberships.user_id', name: 'user_id', type: 'INTEGER', pk: true, fk: false, notNull: false, unique: false },
+              { id: 'memberships.group_id', name: 'group_id', type: 'INTEGER', pk: true, fk: false, notNull: false, unique: false },
+              { id: 'memberships.role', name: 'role', type: 'VARCHAR', pk: false, fk: false, notNull: false, unique: false },
+            ],
+          },
+        },
+      ],
+      relationships: [],
+    });
+
+    expect(out).toContain('PRIMARY KEY ("user_id", "group_id")');
+    expect(out).not.toContain('SERIAL');
+    // PK komposit tidak boleh inline di baris kolom
+    expect(out).not.toMatch(/"user_id" INTEGER (NOT NULL )?PRIMARY KEY/);
+    expect(out).not.toMatch(/"group_id" INTEGER (NOT NULL )?PRIMARY KEY/);
   });
 });
 
 describe('sqlGenerator — umum', () => {
+  // Snapshot dari output SEBELUM perbaikan FK-inline SQLite & PK SERIAL PG.
+  // Perbaikan hanya menyentuh jalur SQLite + cabang PG, jadi output MySQL dan
+  // Generic wajib identik byte-per-byte.
+  it('output MySQL tidak berubah', () => {
+    expect(sql('mysql')).toBe(MYSQL_SNAPSHOT);
+  });
+
+  it('output Generic tidak berubah', () => {
+    expect(sql('generic')).toBe(GENERIC_SNAPSHOT);
+  });
+
   it('db_type tidak dikenal diperlakukan seperti generic', () => {
     expect(generateSQL({ ...fixture('generic'), meta: {} })).toBe(sql('generic'));
   });
