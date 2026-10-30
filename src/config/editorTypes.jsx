@@ -17,16 +17,20 @@ import Sidebar from '../components/editor/Sidebar';
 import FlowchartSidebar from '../components/editor/FlowchartSidebar';
 import UseCaseSidebar from '../components/editor/UseCaseSidebar';
 import StateMachineSidebar from '../components/editor/StateMachineSidebar';
+import ArchitectureSidebar from '../components/editor/ArchitectureSidebar';
 
 import TableNode from '../components/editor/TableNode';
 import FlowchartNode from '../components/editor/FlowchartNode';
 import UseCaseNode from '../components/editor/UseCaseNode';
 import StateMachineNode from '../components/editor/StateMachineNode';
+import ArchitectureNode from '../components/editor/ArchitectureNode';
 import UseCaseEdge from '../components/editor/UseCaseEdge';
 import StateMachineEdge from '../components/editor/StateMachineEdge';
+import ArchitectureEdge from '../components/editor/ArchitectureEdge';
 
 import UseCaseMarkers from '../components/editor/UseCaseMarkers';
 import StateMachineMarkers from '../components/editor/StateMachineMarkers';
+import ArchitectureMarkers from '../components/editor/ArchitectureMarkers';
 
 import { useEditorStore } from '../store/editorStore';
 import { getDiagramType } from './diagramTypes';
@@ -106,6 +110,22 @@ export const EDITOR_TYPES = {
       </Tips>
     ),
     overlays: StateMachineMarkers,
+  },
+  architecture: {
+    sidebar: ArchitectureSidebar,
+    nodeTypes: { architecture: ArchitectureNode },
+    edgeTypes: { architecture: ArchitectureEdge },
+    defaultEdge: { type: 'architecture' },
+    addNode: (type, position) =>
+      useEditorStore.getState().addArchitectureNode(type, position),
+    tips: (
+      <Tips wide>
+        <strong className="text-primary font-medium">Tips:</strong> Drag between
+        elements to add a relationship, then click its label to edit{' '}
+        <strong>description [technology]</strong>.
+      </Tips>
+    ),
+    overlays: ArchitectureMarkers,
   },
 };
 

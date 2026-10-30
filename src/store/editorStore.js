@@ -11,6 +11,12 @@ import {
   SM_DEFAULT_SIZES,
   SM_DEFAULT_LABELS,
 } from '../config/stateMachineTypes';
+import {
+  ARCH_NODE_TYPES,
+  ARCH_DEFAULT_SIZES,
+  ARCH_DEFAULT_LABELS,
+  ARCH_DEFAULT_FIELDS,
+} from '../config/architectureTypes';
 import { getDiagramType, isGraphType } from '../config/diagramTypes';
 import { CONNECT_STRATEGIES } from '../config/connectStrategies';
 import { useToastStore } from './toastStore';
@@ -561,6 +567,51 @@ export const useEditorStore = create((set, get) => ({
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
+  // === ARCHITECTURE: tambah node ===
+  addArchitectureNode: (subtype, position) => {
+    const { nodes, _vaultPath, _projectId, _filename } = get();
+    const size = ARCH_DEFAULT_SIZES[subtype] || ARCH_DEFAULT_SIZES[ARCH_NODE_TYPES.CONTAINER];
+
+    const newNode = {
+      id: `arch-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'architecture',
+      position,
+      data: {
+        type: subtype,
+        label: ARCH_DEFAULT_LABELS[subtype] ?? '',
+        ...ARCH_DEFAULT_FIELDS[subtype],
+      },
+      style: { width: size.width, height: size.height },
+    };
+
+    // Satu snapshot per aksi, untuk kedua jalur (boundary & bukan).
+    get().commitHistory('action');
+
+    // Boundary adalah pengelompok visual: taruh di layer paling belakang
+    // (pola systemBoundary Use Case — bukan parent node React Flow).
+    if (subtype === ARCH_NODE_TYPES.BOUNDARY) {
+      set({ nodes: [newNode, ...nodes] });
+    } else {
+      set({ nodes: [...nodes, newNode] });
+    }
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Label relationship ("description" + "[technology]"). Satu snapshot per burst. */
+  setArchitectureEdgeData: (edgeId, patch) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
+    set((state) => ({
+      flowEdges: state.flowEdges.map((e) =>
+        e.id === edgeId ? { ...e, data: { ...e.data, ...patch } } : e,
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+
 
   // === USE CASE: replace all (untuk import JSON) ===
   replaceUseCaseGraph: ({ nodes, edges, canvasState }) => {

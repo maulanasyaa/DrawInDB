@@ -9,7 +9,7 @@ import {
 } from '../src/config/diagramTypes.js';
 
 describe('getDiagramType', () => {
-  it.each(['erd', 'flowchart', 'usecase', 'statemachine'])('mengembalikan entri eksak untuk "%s"', (id) => {
+  it.each(['erd', 'flowchart', 'usecase', 'statemachine', 'architecture'])('mengembalikan entri eksak untuk "%s"', (id) => {
     expect(getDiagramType(id)).toBe(DIAGRAM_TYPES[id]);
   });
 
@@ -23,10 +23,11 @@ describe('getDiagramType', () => {
 });
 
 describe('isGraphType', () => {
-  it('true untuk flowchart, usecase & statemachine', () => {
+  it('true untuk flowchart, usecase, statemachine & architecture', () => {
     expect(isGraphType('flowchart')).toBe(true);
     expect(isGraphType('usecase')).toBe(true);
     expect(isGraphType('statemachine')).toBe(true);
+    expect(isGraphType('architecture')).toBe(true);
   });
 
   it('false untuk erd dan tipe tak dikenal (fallback ERD)', () => {
@@ -89,11 +90,11 @@ describe('registry invariants', () => {
     }
   });
 
-  it('export SQL hanya ERD, export JSON hanya Use Case, PNG untuk ERD + Flowchart + State Machine', () => {
+  it('export SQL hanya ERD, export JSON hanya Use Case, PNG untuk ERD + Flowchart + State Machine + Architecture', () => {
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.sql).map((t) => t.id)).toEqual(['erd']);
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.json).map((t) => t.id)).toEqual(['usecase']);
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.png).map((t) => t.id).sort()).toEqual(
-      ['erd', 'flowchart', 'statemachine'],
+      ['architecture', 'erd', 'flowchart', 'statemachine'],
     );
   });
 
@@ -101,12 +102,13 @@ describe('registry invariants', () => {
     expect(getDiagramType('usecase').badge).toBe('USE CASE');
   });
 
-  it('DIAGRAM_TYPE_LIST urut erd → flowchart → usecase → statemachine (urutan kartu di ProjectDetail)', () => {
+  it('DIAGRAM_TYPE_LIST urut erd → flowchart → usecase → statemachine → architecture (urutan kartu di ProjectDetail)', () => {
     expect(DIAGRAM_TYPE_LIST.map((t) => t.id)).toEqual([
       'erd',
       'flowchart',
       'usecase',
       'statemachine',
+      'architecture',
     ]);
   });
 });

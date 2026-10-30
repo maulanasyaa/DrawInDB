@@ -98,4 +98,23 @@ const statemachine = (connection, { get }) => {
   return { flowEdges: [...get().flowEdges, newEdge] };
 };
 
-export const CONNECT_STRATEGIES = { erd, flowchart, usecase, statemachine };
+/**
+ * Architecture: relationship C4 (deskripsi + teknologi). Self-loop ditolak
+ * (kembalikan null — jalur penolakan yang sama dengan ERD): C4 relationship
+ * menghubungkan dua elemen berbeda; loop dalam satu elemen bukan relasi
+ * bermakna di level Context/Container. Tanpa dedupe — beberapa relationship
+ * antara dua elemen sama (teknologi/deskripsi beda) sah.
+ */
+const architecture = (connection, { get }) => {
+  if (connection.source === connection.target) return null;
+
+  const newEdge = {
+    ...connection,
+    id: `arch-${connection.source}-${connection.target}-${Date.now()}`,
+    type: 'architecture',
+    data: { label: '', technology: '' },
+  };
+  return { flowEdges: [...get().flowEdges, newEdge] };
+};
+
+export const CONNECT_STRATEGIES = { erd, flowchart, usecase, statemachine, architecture };

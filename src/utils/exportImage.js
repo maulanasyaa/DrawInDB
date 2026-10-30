@@ -268,7 +268,8 @@ export async function exportDiagramAsImage(nodes, options = {}) {
       title.startsWith("Decision should have") ||
       title.startsWith("State has no") ||
       title.startsWith("Final state cannot") ||
-      title.startsWith("State machine has more than one")
+      title.startsWith("State machine has more than one") ||
+      title.startsWith("Architecture:")
     ) {
       return false;
     }
