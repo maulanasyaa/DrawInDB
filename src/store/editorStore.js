@@ -666,22 +666,13 @@ export const useEditorStore = create((set, get) => ({
 
       if (!sourceCol || !targetCol) return;
 
-      let parentCol = null, childCol = null;
-      let childTableId = null;
-
-      if (targetCol.pk && !sourceCol.pk) {
-        parentCol = targetCol;
-        childCol = sourceCol;
-        childTableId = connection.source;
-      } else if (sourceCol.pk && !targetCol.pk) {
-        parentCol = sourceCol;
-        childCol = targetCol;
-        childTableId = connection.target;
-      } else {
-        parentCol = targetCol;
-        childCol = sourceCol;
-        childTableId = connection.source;
-      }
+      // Arah relasi selalu source → target: FK jatuh ke kolom TARGET apa pun
+      // status PK-nya. `pk` hanya dipakai untuk menentukan tipe kolom acuan.
+      // Sengaja tidak memakai heuristik PK untuk memindah arah; `fk` harus
+      // konsisten dengan clearOrphanFk yang membersihkan kolom target.
+      const parentCol = sourceCol;
+      const childCol = targetCol;
+      const childTableId = connection.target;
 
       const edge = {
         ...connection,

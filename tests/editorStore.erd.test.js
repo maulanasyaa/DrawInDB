@@ -276,6 +276,95 @@ describe('editorStore ERD — FK lifecycle', () => {
 
     s().deleteRelationship(s().relationships[0].id);
     expect(s().relationships).toEqual([]);
+
+describe('editorStore ERD — FK selalu di kolom target', () => {
+  // Seed sumber & target sama-sama non-PK: flag FK hanya boleh di kolom target.
+  function seedNonPk() {
+    seed(ERD, {
+      tables: [
+        table('users', 'users', [col('users.id', 'id', 'INT')]),
+        table('orders', 'orders', [
+          col('orders.id', 'id', 'BIGINT'),
+          col('orders.user_id', 'user_id', 'VARCHAR'),
+        ]),
+      ],
+    });
+  }
+
+  function connectUsersToOrders() {
+    s().onConnect({
+      source: 'users',
+      sourceHandle: 'users.id',
+      target: 'orders',
+      targetHandle: 'orders.user_id',
+    });
+  }
+
+  it('onConnect sumber non-PK menandai FK hanya di kolom target', () => {
+    seedNonPk();
+    connectUsersToOrders();
+
+    expect(s().relationships).toHaveLength(1);
+    expect(findCol('orders.user_id').fk).toBe(true);
+    // Tipe kolom target ikut tipe kolom sumber, tapi tidak sebaliknya.
+    expect(findCol('orders.user_id').type).toBe('INT');
+
+    expect(findCol('users.id').fk).toBe(false);
+    expect(findCol('users.id').type).toBe('INT');
+    expect(findCol('orders.id').fk).toBe(false);
+    expect(findCol('orders.id').type).toBe('BIGINT');
+  });
+
+  it('onConnect sumber PK menandai FK hanya di kolom target', () => {
+    seedErd(); // users.id PK, orders.user_id non-PK
+    connectUserToOrder();
+
+    expect(findCol('orders.user_id').fk).toBe(true);
+    expect(findCol('orders.user_id').type).toBe('INT');
+    expect(findCol('users.id').fk).toBe(false);
+  });
+
+  it('dua relasi ke kolom target yang sama: FK tetap di target', () => {
+    seed(ERD, {
+      tables: [
+        table('users', 'users', [col('users.id', 'id', 'INT')]),
+        table('legacy', 'legacy', [col('legacy.id', 'id', 'VARCHAR')]),
+        table('orders', 'orders', [col('orders.user_id', 'user_id', 'TEXT')]),
+      ],
+    });
+    connectUsersToOrders();
+    s().onConnect({
+      source: 'legacy',
+      sourceHandle: 'legacy.id',
+      target: 'orders',
+      targetHandle: 'orders.user_id',
+    });
+
+    expect(s().relationships).toHaveLength(2);
+    expect(findCol('orders.user_id').fk).toBe(true);
+    expect(findCol('orders.user_id').type).toBe('VARCHAR');
+    expect(findCol('users.id').fk).toBe(false);
+    expect(findCol('legacy.id').fk).toBe(false);
+
+    s().deleteRelationship(s().relationships[1].id);
+    expect(findCol('orders.user_id').fk).toBe(true);
+    s().deleteRelationship(s().relationships[0].id);
+    expect(findCol('orders.user_id').fk).toBe(false);
+  });
+
+  it('onConnect non-PK → non-PK mencatat tepat satu snapshot history', () => {
+    seedNonPk();
+    expect(s().historyPast).toHaveLength(0);
+
+    connectUsersToOrders();
+    expect(s().historyPast).toHaveLength(1);
+
+    s().undo();
+    expect(s().relationships).toEqual([]);
+    expect(findCol('orders.user_id').fk).toBe(false);
+  });
+});
+
     expect(findCol('orders.user_id').fk).toBe(false);
   });
 });

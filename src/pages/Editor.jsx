@@ -186,6 +186,7 @@ function EditorContent() {
           </div>
         )}
 
+        {/* deleteKeyCode default React Flow hanya "Backspace"; tambah Delete. */}
         <ReactFlow
           nodes={isNodeBased ? nodes : tables}
           edges={isNodeBased ? flowEdges : relationships}
@@ -194,6 +195,7 @@ function EditorContent() {
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
+          deleteKeyCode={["Backspace", "Delete"]}
           defaultEdgeOptions={
             isUseCase ? { type: "usecase" } : { type: "smoothstep" }
           }
