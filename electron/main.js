@@ -180,6 +180,12 @@ if (!gotTheLock) {
     return true;
   });
 
+  ipcMain.handle('fs:deleteDirectory', async (event, dirPath) => {
+    assertVaultAccess(dirPath);
+    await fs.promises.rm(dirPath, { recursive: true, force: true });
+    return true;
+  });
+
   ipcMain.handle('fs:renameFile', async (event, oldPath, newPath) => {
     assertVaultAccess(oldPath);
     assertVaultAccess(newPath);

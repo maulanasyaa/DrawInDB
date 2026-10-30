@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createPrdDoc, sanitizeDocFilename, docDisplayName } from '../utils/prd.js';
 
 export const useVaultStore = create((set, get) => ({
   currentVault: null, // { path, name, projects: [] }
@@ -249,7 +250,35 @@ export const useVaultStore = create((set, get) => ({
 
               // Urutkan diagram dari yang paling baru diubah
               diagrams.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-              projects.push({ ...projMeta, diagrams });
+
+              // Dokumen PRD. Folder docs/ opsional: project lama tanpa docs/
+              // hanya mendapat `documents: []`. File rusak dilewati, bukan fatal.
+              const documents = [];
+              const docsDir = await window.api.pathJoin(projPath, 'docs');
+              if (await window.api.pathExists(docsDir)) {
+                const docFiles = await window.api.listFiles(docsDir);
+
+                for (const docItem of docFiles) {
+                  const docName = typeof docItem === 'string' ? docItem : (docItem.name || '');
+                  if (!docName || docName.startsWith('.') || !docName.endsWith('.json')) continue;
+
+                  try {
+                    const docPath = await window.api.pathJoin(docsDir, docName);
+                    const doc = JSON.parse(await window.api.readFile(docPath));
+                    documents.push({
+                      filename: docName,
+                      name: doc.meta?.name || docDisplayName(docName),
+                      type: doc.meta?.type || 'prd',
+                      updated_at: doc.meta?.updated_at || ''
+                    });
+                  } catch (err) {
+                    console.error(`Gagal membaca dokumen ${docName}:`, err);
+                  }
+                }
+              }
+              documents.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
+
+              projects.push({ ...projMeta, diagrams, documents });
             } catch (err) {
               console.error(`Gagal memuat project ${dirName}:`, err);
             }
@@ -356,9 +385,8 @@ export const useVaultStore = create((set, get) => ({
     try {
       const projectPath = await window.api.pathJoin(currentVault.path, 'projects', projectId);
 
-      // Catatan: window.api.deleteFile idealnya mendukung penghapusan direktori (rm -rf).
-      // Pastikan API preload Electron Anda (deleteFile/deleteDirectory) bisa menghapus folder beserta isinya.
-      await window.api.deleteFile(projectPath);
+      // Folder project berisi diagrams/ + docs/; harus rm -rf, bukan unlink.
+      await window.api.deleteDirectory(projectPath);
 
       const updatedProjects = currentVault.projects.filter(p => p.id !== projectId);
 
@@ -504,5 +532,133 @@ export const useVaultStore = create((set, get) => ({
     } catch (error) {
       set({ error: error.message, isLoading: false });
     }
+  },
+
+  // --- DOCUMENT ACTIONS (PRD) ---
+  // Bukan tipe diagram: file di projects/<id>/docs/, bukan diagrams/.
+
+  createDocument: async (projectId, name) => {
+    const { currentVault } = get();
+    if (!currentVault) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      const docsPath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'docs');
+      await window.api.mkdir(docsPath); // recursive: dibuat saat dokumen pertama
+
+      const base = sanitizeDocFilename(name).replace(/\.json$/, '');
+      let filename = `${base}.json`;
+      let counter = 1;
+      let filePath = await window.api.pathJoin(docsPath, filename);
+
+      while (await window.api.pathExists(filePath)) {
+        filename = `${base}_${counter}.json`;
+        filePath = await window.api.pathJoin(docsPath, filename);
+        counter++;
+      }
+
+      const doc = createPrdDoc(projectId, name);
+      await window.api.writeFile(filePath, JSON.stringify(doc, null, 2));
+
+      const newDocMeta = {
+        filename,
+        name: doc.meta.name,
+        type: doc.meta.type,
+        updated_at: doc.meta.updated_at
+      };
+
+      const updatedProjects = currentVault.projects.map(proj => {
+        if (proj.id === projectId) {
+          return { ...proj, documents: [newDocMeta, ...(proj.documents || [])] };
+        }
+        return proj;
+      });
+
+      set({
+        currentVault: { ...currentVault, projects: updatedProjects },
+        isLoading: false
+      });
+
+      return filename;
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  renameDocument: async (projectId, filename, newName) => {
+    const { currentVault } = get();
+    if (!currentVault) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      const filePath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'docs', filename);
+      const doc = JSON.parse(await window.api.readFile(filePath));
+
+      doc.meta = { ...(doc.meta || {}), name: newName, updated_at: new Date().toISOString() };
+      await window.api.writeFile(filePath, JSON.stringify(doc, null, 2));
+
+      const updatedProjects = currentVault.projects.map(proj => {
+        if (proj.id === projectId) {
+          const documents = (proj.documents || []).map(d =>
+            d.filename === filename ? { ...d, name: newName, updated_at: doc.meta.updated_at } : d
+          );
+          return { ...proj, documents };
+        }
+        return proj;
+      });
+
+      set({
+        currentVault: { ...currentVault, projects: updatedProjects },
+        isLoading: false
+      });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  deleteDocument: async (projectId, filename) => {
+    const { currentVault } = get();
+    if (!currentVault) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      const filePath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'docs', filename);
+      await window.api.deleteFile(filePath);
+
+      const updatedProjects = currentVault.projects.map(proj => {
+        if (proj.id === projectId) {
+          return { ...proj, documents: (proj.documents || []).filter(d => d.filename !== filename) };
+        }
+        return proj;
+      });
+
+      set({
+        currentVault: { ...currentVault, projects: updatedProjects },
+        isLoading: false
+      });
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  /**
+   * Perbarui metadata dokumen di daftar memori setelah autosave.
+   * Tidak menyentuh isLoading (autosave tidak boleh memicu spinner) dan tidak
+   * membaca ulang vault.
+   */
+  updateDocumentMeta: (projectId, filename, patch) => {
+    const { currentVault } = get();
+    if (!currentVault) return;
+
+    const updatedProjects = currentVault.projects.map(proj => {
+      if (proj.id !== projectId) return proj;
+      const documents = (proj.documents || []).map(d =>
+        d.filename === filename ? { ...d, ...patch } : d
+      );
+      return { ...proj, documents };
+    });
+
+    set({ currentVault: { ...currentVault, projects: updatedProjects } });
   }
 }));

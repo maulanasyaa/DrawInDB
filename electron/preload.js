@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   listFiles: (dirPath) => ipcRenderer.invoke('fs:listFiles', dirPath),
   mkdir: (dirPath) => ipcRenderer.invoke('fs:mkdir', dirPath),
   deleteFile: (path) => ipcRenderer.invoke('fs:deleteFile', path),
+  deleteDirectory: (dirPath) => ipcRenderer.invoke('fs:deleteDirectory', dirPath),
   renameFile: (oldPath, newPath) => ipcRenderer.invoke('fs:renameFile', oldPath, newPath),
   pathExists: (path) => ipcRenderer.invoke('fs:pathExists', path),
   pathJoin: (...paths) => ipcRenderer.invoke('path:join', ...paths),
