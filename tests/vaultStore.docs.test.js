@@ -66,6 +66,7 @@ function installFakeFs(seedFiles = {}) {
     },
     saveRecentVault: async () => true,
     getRecentVaults: async () => [],
+    setCurrentVaultPath: async () => true,
   };
 
   globalThis.window = { api };

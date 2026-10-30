@@ -191,6 +191,11 @@ export const useVaultStore = create((set, get) => ({
   openVault: async (folderPath) => {
     set({ isLoading: true, error: null });
     try {
+      // Pindahkan guard IPC ke vault baru SEBELUM menyentuh file apa pun.
+      // Tanpa ini, membuka vault lain setelah satu vault terbuka ditolak
+      // assertVaultAccess di main process.
+      await window.api.setCurrentVaultPath(folderPath);
+
       const configPath = await window.api.pathJoin(folderPath, '.drawindb', 'config.json');
       if (!(await window.api.pathExists(configPath))) {
         throw new Error('Not a valid DrawInDB vault. Missing config.');
@@ -317,9 +322,11 @@ export const useVaultStore = create((set, get) => ({
       const drawindbPath = await window.api.pathJoin(folderPath, '.drawindb');
       const diagramsPath = await window.api.pathJoin(folderPath, 'diagrams');
 
-      const exists = await window.api.pathExists(drawindbPath);
-      if (exists) {
-        throw new Error('Vault already exists in this directory.');
+      // Folder sudah berupa vault: buka saja, jangan timpa.
+      if (await window.api.pathExists(drawindbPath)) {
+        await get().openVault(folderPath);
+        get().loadRecentVaults();
+        return;
       }
 
       await window.api.mkdir(drawindbPath);
@@ -335,17 +342,11 @@ export const useVaultStore = create((set, get) => ({
       const configPath = await window.api.pathJoin(drawindbPath, 'config.json');
       await window.api.writeFile(configPath, JSON.stringify(config, null, 2));
 
-      await window.api.saveRecentVault(folderPath);
-
-      set({
-        currentVault: {
-          path: folderPath,
-          name: vaultName,
-          diagrams: []
-        },
-        isLoading: false
-      });
-
+      // Muat lewat loader yang sama supaya bentuknya identik dengan vault yang
+      // dibuka (projects: [], documents: [], dst). Sebelumnya di sini diset
+      // {path, name, diagrams: []} tanpa `projects`, sehingga Home tidak
+      // merender empty state maupun kartu.
+      await get().openVault(folderPath);
       get().loadRecentVaults();
     } catch (error) {
       set({ error: error.message, isLoading: false });
