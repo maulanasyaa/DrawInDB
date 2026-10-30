@@ -1,30 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import {
-  corridorOf,
-  corridorSlots,
-  slotOffset,
-  pathPoints,
+  pairGroupKey,
+  parallelOffsets,
   archEdgePath,
-  geometryOf,
-  parallelKey,
   hasArchEdgeContent,
   shouldRenderArchEdgeLabel,
   isArchEdgePlaceholder,
-  ARCH_PATH_OFFSET,
-  ARCH_CORRIDOR_STEP,
+  ARCH_SLOT_STEP,
+  ARCH_MIN_STUB,
+  ARCH_MAX_STUB,
+  ARCH_HANDLE_INSET,
   ARCH_BOUNDARY_Z,
   ARCH_EDGE_Z,
 } from '../src/utils/architectureEdgeLayout.js';
-
-const node = (id, x, y, w, h, subtype = 'container') => ({
-  id,
-  type: 'architecture',
-  position: { x, y },
-  width: w,
-  height: h,
-  data: { type: subtype, label: id },
-});
-
 const e = (id, source, target, sourceHandle = 'right', targetHandle = 'left') => ({
   id,
   source,
@@ -34,182 +22,142 @@ const e = (id, source, target, sourceHandle = 'right', targetHandle = 'left') =>
   type: 'architecture',
 });
 
-const geomOf = (nodes) => (edge) => geometryOf(edge, nodes);
+// Handle sesuai posisi kotak: A kanan, B kiri (A di kiri B).
+const forward = {
+  sourceX: 100,
+  sourceY: 50,
+  sourcePosition: 'right',
+  targetX: 300,
+  targetY: 50,
+  targetPosition: 'left',
+};
+const backward = {
+  sourceX: 300,
+  sourceY: 50,
+  sourcePosition: 'left',
+  targetX: 100,
+  targetY: 50,
+  targetPosition: 'right',
+};
 
-describe('corridorOf — formula sama dengan getPoints React Flow v11', () => {
-  it('kanan→kiri: koridor vertikal di tengah', () => {
-    expect(
-      corridorOf({
-        sourceX: 120,
-        sourceY: 75,
-        targetX: 300,
-        targetY: 60,
-        sourcePosition: 'right',
-        targetPosition: 'left',
-      }),
-    ).toEqual({ axis: 'v', value: 210 });
+/** Dua titik kontrol kubik dari string path: [c1x, c1y, c2x, c2y]. */
+const controlsOf = (path) => path.split(' C ')[1].split(' ').map(Number);
+
+describe('pairGroupKey — grup tak berarah', () => {
+  it('A→B dan B→A satu grup', () => {
+    expect(pairGroupKey(e('a', 'A', 'B'))).toBe(pairGroupKey(e('b', 'B', 'A', 'left', 'right')));
   });
 
-  it('bawah→atas: koridor horizontal di tengah', () => {
-    expect(
-      corridorOf({
-        sourceX: 400,
-        sourceY: 240,
-        targetX: 400,
-        targetY: 300,
-        sourcePosition: 'bottom',
-        targetPosition: 'top',
-      }),
-    ).toEqual({ axis: 'h', value: 270 });
+  it('pasangan handle berbeda tetap terpisah', () => {
+    expect(pairGroupKey(e('a', 'A', 'B', 'right', 'left'))).not.toBe(
+      pairGroupKey(e('b', 'A', 'B', 'bottom', 'top')),
+    );
   });
 
-  it('handle sejenis (kanan→kanan): koridor horizontal di antara y', () => {
-    expect(
-      corridorOf({
-        sourceX: 100,
-        sourceY: 50,
-        targetX: 100,
-        targetY: 200,
-        sourcePosition: 'right',
-        targetPosition: 'right',
-      }),
-    ).toEqual({ axis: 'h', value: 125 });
+  it('pasangan node berbeda terpisah', () => {
+    expect(pairGroupKey(e('a', 'A', 'B'))).not.toBe(pairGroupKey(e('b', 'A', 'C')));
   });
 });
 
-
-describe('corridorSlots — edge dengan koridor bertumpuk dipisah', () => {
-  // Contoh "toko online": person di kiri, web & api satu kolom, orders db di
-  // bawah keduanya.
-  const nodes = [
-    node('person', 0, 0, 120, 150, 'person'),
-    node('web', 300, 0, 220, 120),
-    node('api', 300, 180, 220, 120),
-    node('db', 380, 360, 180, 110, 'database'),
-  ];
-  const edges = [
-    e('e1', 'person', 'web'),
-    e('e2', 'person', 'api'),
-    e('e3', 'web', 'db', 'bottom', 'top'),
-    e('e4', 'api', 'db', 'bottom', 'top'),
-  ];
-
-  it('empat edge → empat jalur berbeda', () => {
-    const slots = corridorSlots(edges, geomOf(nodes));
-    const paths = edges.map(
-      (edge) => archEdgePath(geometryOf(edge, nodes), slots.get(edge.id)).path,
-    );
-
-    expect(new Set(paths).size).toBe(4);
+describe('parallelOffsets', () => {
+  it('edge tunggal → offset 0 (kurva bezier biasa)', () => {
+    expect(parallelOffsets([e('a', 'A', 'B')]).get('a')).toBe(0);
   });
 
-  it('dua edge dari person (satu handle) → jalur berbeda & slot berurutan', () => {
-    const slots = corridorSlots(edges, geomOf(nodes));
-    const a = slots.get('e1');
-    const b = slots.get('e2');
-    const pa = archEdgePath(geometryOf(edges[0], nodes), a).path;
-    const pb = archEdgePath(geometryOf(edges[1], nodes), b).path;
+  it('dua edge searah → simetris terhadap 0', () => {
+    const offsets = parallelOffsets([e('a', 'A', 'B'), e('b', 'A', 'B')]);
 
-    expect(pa).not.toBe(pb);
+    expect(offsets.get('a')).toBe(-ARCH_SLOT_STEP / 2);
+    expect(offsets.get('b')).toBe(ARCH_SLOT_STEP / 2);
   });
 
-  it('web→db dan api→db tidak lagi berbagi koridor horizontal', () => {
-    const slots = corridorSlots(edges, geomOf(nodes));
+  it('A→B dan B→A (dua arah) → jalur fisik terpisah', () => {
+    const edges = [e('a', 'A', 'B'), e('b', 'B', 'A', 'left', 'right')];
+    const offsets = parallelOffsets(edges);
+    const pa = archEdgePath({ ...forward, offset: offsets.get('a') });
+    const pb = archEdgePath({ ...backward, offset: offsets.get('b') });
 
-    expect(slots.get('e3').value).not.toBe(slots.get('e4').value);
+    // Normal kedua sisi berlawanan; tanpa koreksi tanda kedua kurva menumpuk.
+    expect(pa.path).not.toBe(pb.path);
+    expect(pa.labelY).not.toBe(pb.labelY);
+    expect(Math.abs(pa.labelY - pb.labelY)).toBeGreaterThan(ARCH_SLOT_STEP / 2);
   });
 
-  it('edge tunggal tetap di tengah (slot 0)', () => {
-    const slots = corridorSlots([edges[0]], geomOf(nodes));
+  it('pasangan node berbeda tidak saling menggeser', () => {
+    const offsets = parallelOffsets([
+      e('a', 'A', 'B'),
+      e('b', 'A', 'B'),
+      e('c', 'A', 'C'),
+    ]);
 
-    expect(slots.get('e1').slot).toBe(0);
-    expect(slots.get('e1').value).toBe(corridorOf(geometryOf(edges[0], nodes)).value);
+    expect(offsets.get('c')).toBe(0);
+    expect(offsets.get('a')).toBe(-ARCH_SLOT_STEP / 2);
   });
 
-  it('urutan slot stabil saat file dibuka ulang (urutan edges sama)', () => {
-    const forward = corridorSlots(edges, geomOf(nodes));
-    const again = corridorSlots(edges, geomOf(nodes));
+  it('deterministik terhadap urutan array', () => {
+    const edges = [e('a', 'A', 'B'), e('b', 'A', 'B'), e('c', 'A', 'B')];
+    const first = parallelOffsets(edges);
+    const second = parallelOffsets([...edges].reverse());
 
-    expect([...forward.entries()]).toEqual([...again.entries()]);
-  });
-
-  it('node tanpa ukuran → geometri null, edge diskip', () => {
-    expect(geometryOf(e('x', 'a', 'b'), [])).toBe(null);
-    expect(corridorSlots([], geomOf(nodes)).size).toBe(0);
+    for (const edge of edges) {
+      expect(second.get(edge.id)).toBe(first.get(edge.id));
+    }
+    // Tiga edge: -step, 0, +step.
+    expect([first.get('a'), first.get('b'), first.get('c')]).toEqual([
+      -ARCH_SLOT_STEP,
+      0,
+      ARCH_SLOT_STEP,
+    ]);
   });
 });
 
-describe('geometryOf + pathPoints — panah menyentuh tepi bentuk', () => {
-  const db = node('db', 380, 360, 180, 110, 'database');
-  const web = node('web', 300, 0, 220, 120);
+describe('archEdgePath', () => {
+  it('mulai & berakhir di tepi bentuk (handle ditarik masuk ARCH_HANDLE_INSET)', () => {
+    const { path } = archEdgePath(forward);
+    // source kanan → titik masuk = sourceX - inset; target kiri → targetX + inset.
+    const sx = forward.sourceX - ARCH_HANDLE_INSET;
+    const tx = forward.targetX + ARCH_HANDLE_INSET;
 
-  it('handle top database di puncak silinder, bukan tepi kotak tengah', () => {
-    const g = geometryOf(e('e', 'web', 'db', 'bottom', 'top'), [web, db]);
-
-    expect(g.targetX).toBe(380 + 0.25 * 180);
-    expect(g.targetY).toBe(360);
-    expect(g.targetPosition).toBe('top');
+    expect(path.startsWith(`M ${sx} ${forward.sourceY} C `)).toBe(true);
+    expect(path.endsWith(`${tx} ${forward.targetY}`)).toBe(true);
   });
 
-  it('handle left/right database di dinding silinder atas', () => {
-    const left = geometryOf(e('e', 'web', 'db', 'right', 'left'), [web, db]);
-    const right = geometryOf(e('e', 'db', 'web', 'right', 'left'), [web, db]);
+  it('offset 0 → keluar tegak lurus dari sisi handle', () => {
+    const [c1x, c1y] = controlsOf(archEdgePath(forward).path);
 
-    expect(left.targetX).toBe(380 + 0.1667 * 180);
-    expect(left.targetY).toBeCloseTo(360 + 110 * 0.08);
-    expect(right.sourceX).toBe(380 + 0.8333 * 180);
-    expect(right.sourceY).toBeCloseTo(360 + 110 * 0.08);
+    // Sisi kanan: tidak ada komponen vertikal, hanya menjauh di sumbu x.
+    expect(c1y).toBe(forward.sourceY);
+    expect(c1x).toBeGreaterThan(forward.sourceX - ARCH_HANDLE_INSET);
   });
 
-  it('handle bottom database di dasar silinder, bukan tepi kotak', () => {
-    const g = geometryOf(e('e', 'db', 'web', 'bottom', 'top'), [web, db]);
+  it('label di titik kubik t=0.5 (sama dengan getBezierEdgeCenter)', () => {
+    const [c1x, c1y, c2x, c2y] = controlsOf(archEdgePath(forward).path);
+    const { labelX, labelY } = archEdgePath(forward);
+    const sx = forward.sourceX - ARCH_HANDLE_INSET;
+    const tx = forward.targetX + ARCH_HANDLE_INSET;
 
-    expect(g.sourceX).toBe(380 + 0.75 * 180);
-    expect(g.sourceY).toBeCloseTo(360 + 110 * 0.52);
-    expect(g.sourceY).not.toBe(470);
+    expect(labelX).toBe((sx + 3 * c1x + 3 * c2x + tx) / 8);
+    expect(labelY).toBe((forward.sourceY + 3 * c1y + 3 * c2y + forward.targetY) / 8);
   });
 
-  it('subtype tanpa anchor khusus memakai tengah tepi kotak', () => {
-    const g = geometryOf(e('e', 'web', 'db', 'right', 'left'), [web, db]);
+  it('offset menggeser kurva & label, bukan ujungnya', () => {
+    const plain = archEdgePath(forward);
+    const shifted = archEdgePath({ ...forward, offset: 24 });
 
-    // Container tidak punya entri anchor → tepi kanan kotak, tengah tinggi.
-    expect(g.sourceX).toBe(520);
-    expect(g.sourceY).toBe(60);
-    // Database memakai dinding silinder (16.67% leb... bukan tepi kotak).
-    expect(g.targetX).toBeCloseTo(410, 1);
+    // Kedua titik kontrol bergeser penuh, jadi titik tengah (bobot 3/8 + 3/8)
+    // hanya bergeser 0,75 × offset — cukup memisahkan dua edge paralel.
+    expect(shifted.path).not.toBe(plain.path);
+    expect(shifted.labelY).toBeCloseTo(plain.labelY + 24 * 0.75);
+    expect(shifted.labelX).toBe(plain.labelX);
   });
 
-  it('path mulai & berakhir di titik handle', () => {
-    const g = geometryOf(e('e', 'web', 'db', 'bottom', 'top'), [web, db]);
-    const points = pathPoints(g, { axis: 'h', value: 300, slot: 1 });
+  it('stub: minimum untuk jarak dekat, maksimum untuk jarak jauh', () => {
+    const sx = forward.sourceX - ARCH_HANDLE_INSET;
+    const near = archEdgePath({ ...forward, targetX: 120 }); // 32 px
+    const far = archEdgePath({ ...forward, targetX: 1000 }); // 912 px
 
-    expect(points[0]).toEqual({ x: g.sourceX, y: g.sourceY });
-    expect(points[points.length - 1]).toEqual({ x: g.targetX, y: g.targetY });
-  });
-
-  it('path tanpa slot juga ortogonal (tidak ada segmen diagonal)', () => {
-    const g = geometryOf(e('e', 'web', 'db', 'bottom', 'top'), [web, db]);
-    const points = pathPoints(g, undefined);
-    const orthogonal = points.every(
-      (p, i) => i === 0 || p.x === points[i - 1].x || p.y === points[i - 1].y,
-    );
-
-    // db.top ada di x 25% (455) sedangkan web.bottom di x 410 → butuh dua
-    // belokan; yang penting tidak ada garis miring.
-    expect(orthogonal).toBe(true);
-  });
-
-  it('archEdgePath mengembalikan path ortogonal + angka label', () => {
-    const g = geometryOf(e('e', 'web', 'db', 'bottom', 'top'), [web, db]);
-    const { path, labelX, labelY } = archEdgePath(g, { axis: 'h', value: 300, slot: 1 });
-    const points = pathPoints(g, { axis: 'h', value: 300, slot: 1 });
-    const orthogonal = points.every(
-      (p, i) => i === 0 || p.x === points[i - 1].x || p.y === points[i - 1].y,
-    );
-
-    expect(path.startsWith('M ')).toBe(true);
-    expect(orthogonal).toBe(true);
-    expect([labelX, labelY].every((n) => typeof n === 'number')).toBe(true);
+    expect(controlsOf(near.path)[0]).toBe(sx + ARCH_MIN_STUB);
+    expect(controlsOf(far.path)[0]).toBe(sx + ARCH_MAX_STUB);
   });
 });
 
@@ -217,11 +165,10 @@ describe('konstanta layer', () => {
   it('boundary paling belakang, edge di atas node', () => {
     expect(ARCH_BOUNDARY_Z).toBeLessThan(0);
     expect(ARCH_EDGE_Z).toBeGreaterThan(0);
-    expect(ARCH_PATH_OFFSET).toBe(20);
   });
 });
 
-describe('architectureEdgeLayout — label & placeholder', () => {
+describe('label & placeholder', () => {
   it('konten = label atau teknologi (trim)', () => {
     expect(hasArchEdgeContent({ label: 'Makes order' })).toBe(true);
     expect(hasArchEdgeContent({ technology: 'HTTPS' })).toBe(true);
@@ -254,17 +201,5 @@ describe('architectureEdgeLayout — label & placeholder', () => {
     const data = { label: '', technology: '' };
     expect(shouldRenderArchEdgeLabel({ data, selected: false, editing: true })).toBe(true);
     expect(isArchEdgePlaceholder({ data, editing: true })).toBe(false);
-  });
-
-  it('parallelKey membedakan handle', () => {
-    expect(parallelKey(e('a', 'p', 'w', 'right', 'left'))).not.toBe(
-      parallelKey(e('b', 'p', 'w', 'bottom', 'top')),
-    );
-  });
-});
-
-describe('slotOffset — urutan slot 0, +1, -1, +2, -2', () => {
-  it('berurutan tanpa angka pencilan', () => {
-    expect([0, 1, 2, 3, 4, 5].map(slotOffset)).toEqual([0, 1, -1, 2, -2, 3]);
   });
 });

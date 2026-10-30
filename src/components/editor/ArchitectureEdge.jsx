@@ -2,20 +2,23 @@ import React, { useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer } from 'reactflow';
 import { useEditorStore } from '../../store/editorStore';
 import {
-  useArchSlots,
   archEdgePath,
+  parallelOffsets,
   shouldRenderArchEdgeLabel,
   isArchEdgePlaceholder,
 } from '../../utils/architectureEdgeLayout';
 
 /**
- * Relationship Architecture: panah dengan label dua baris opsional —
- * deskripsi (`data.label`) dan teknologi dalam kurung siku
- * (`data.technology` → "[HTTPS/JSON]"). Keduanya diedit inline.
+ * Relationship Architecture: bezier halus + panah + label dua baris opsional —
+ * deskripsi (`data.label`) dan teknologi (`data.technology` → "[HTTPS/JSON]").
+ * Keduanya diedit inline.
  *
- * Label hanya digambar bila ada isi atau edge dipilih. Posisi: titik tengah
- * path, lebar maksimum + teks membungkus (tidak terpotong). Edge yang
- * koridornya bertumpuk dipisah oleh kisi slot (lihat architectureEdgeLayout.js).
+ * • Jalur: `archEdgePath` (keluar dari sisi handle, label di titik tengah kurva).
+ * • Edge pada pasangan node+handle yang sama diberi offset berbeda
+ *   (`parallelOffsets`) — termasuk pasangan dua arah A→B dan B→A.
+ * • Panah: `<marker>` dideklarasikan DI DALAM grup edge ini, jadi berada di
+ *   dokumen SVG yang sama dengan path pemakainya dan dikelola React (tidak
+ *   bergantung pada injeksi DOM / `setTimeout` seperti overlay marker lama).
  */
 export default function ArchitectureEdge({
   id,
@@ -35,31 +38,52 @@ export default function ArchitectureEdge({
   const label = data?.label ?? '';
   const technology = data?.technology ?? '';
 
-  const geom = {
+  // Offset hanya bergantung pada daftar edge (bukan posisi node), jadi drag
+  // node tidak memicu render ulang edge.
+  const edges = useEditorStore((state) => state.flowEdges);
+  const offset = parallelOffsets(edges).get(id) ?? 0;
+
+  const { path: edgePath, labelX, labelY } = archEdgePath({
     sourceX,
     sourceY,
+    sourcePosition,
     targetX,
     targetY,
-    sourcePosition,
     targetPosition,
-  };
-  // Grafik seluruh edge + node: slot koridor dihitung lintas edge.
-  const edges = useEditorStore((state) => state.flowEdges);
-  const nodes = useEditorStore((state) => state.nodes);
-  const slots = useArchSlots(edges, nodes);
-  const slot = slots.get(id);
-  const { path: edgePath, labelX, labelY } = archEdgePath(geom, slot);
+    offset,
+  });
 
   const stroke = selected ? 'var(--border-focus)' : 'var(--text-primary)';
+  const markerId = `arch-arrow-${id}-${selected ? 'sel' : 'def'}`;
   const showLabel = shouldRenderArchEdgeLabel({ data, selected, editing });
   const placeholder = isArchEdgePlaceholder({ data, editing });
 
   return (
     <>
+      <defs>
+        <marker
+          id={markerId}
+          viewBox="0 0 12 12"
+          refX="10"
+          refY="6"
+          markerWidth="12"
+          markerHeight="12"
+          markerUnits="userSpaceOnUse"
+          orient="auto-start-reverse"
+        >
+          {/* style (bukan atribut presentasi) supaya var() pasti ter-resolve. */}
+          <path
+            d="M 1 1 L 10 6 L 1 11"
+            fill="none"
+            style={{ stroke, strokeWidth: selected ? 1.8 : 1.6 }}
+          />
+        </marker>
+      </defs>
+
       <BaseEdge
         id={id}
         path={edgePath}
-        markerEnd={`url(#arch-arrow-${selected ? 'sel' : 'def'})`}
+        markerEnd={`url(#${markerId})`}
         style={{ stroke, strokeWidth: selected ? 2 : 1.5, fill: 'none' }}
       />
 

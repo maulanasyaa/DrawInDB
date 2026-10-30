@@ -30,7 +30,6 @@ import ArchitectureEdge from '../components/editor/ArchitectureEdge';
 
 import UseCaseMarkers from '../components/editor/UseCaseMarkers';
 import StateMachineMarkers from '../components/editor/StateMachineMarkers';
-import ArchitectureMarkers from '../components/editor/ArchitectureMarkers';
 
 import { useEditorStore } from '../store/editorStore';
 import { getDiagramType } from './diagramTypes';
@@ -125,7 +124,9 @@ export const EDITOR_TYPES = {
         <strong>description [technology]</strong>.
       </Tips>
     ),
-    overlays: ArchitectureMarkers,
+    // Panah Architecture dideklarasikan di dalam komponen edge sendiri
+    // (satu dokumen SVG dengan path pemakainya) — tidak butuh overlay.
+    overlays: null,
   },
 };
 
