@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { createPrdDoc, sanitizeDocFilename, docDisplayName } from '../utils/prd.js';
 
+// Electron membungkus error main process: "Error invoking remote method 'x': Error: msg"
+const ipcMessage = (e) =>
+  String(e?.message ?? e).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '');
+
 export const useVaultStore = create((set, get) => ({
   currentVault: null, // { path, name, projects: [] }
   recentVaults: [],
@@ -381,22 +385,18 @@ export const useVaultStore = create((set, get) => ({
     const { currentVault } = get();
     if (!currentVault) return;
 
-    set({ isLoading: true, error: null });
+    set({ error: null });
     try {
       const projectPath = await window.api.pathJoin(currentVault.path, 'projects', projectId);
 
-      // Folder project berisi diagrams/ + docs/; harus rm -rf, bukan unlink.
-      await window.api.deleteDirectory(projectPath);
+      // Folder project berisi diagrams/ + docs/; dipindah utuh ke Trash OS.
+      await window.api.trashPath(projectPath);
 
-      const updatedProjects = currentVault.projects.filter(p => p.id !== projectId);
-
-      const updatedVault = { ...currentVault, projects: updatedProjects };
-      set({ currentVault: updatedVault, isLoading: false });
-
-      // Persist updated vault to recent vaults
-      await window.api.saveRecentVault(currentVault.path);
+      // State dibersihkan setelah trash sukses supaya gagal tidak menyisakan
+      // baris hantu. recentVaults menyimpan vault, bukan project.
+      set({ currentVault: { ...currentVault, projects: currentVault.projects.filter(p => p.id !== projectId) } });
     } catch (error) {
-      set({ error: error.message, isLoading: false });
+      throw new Error(ipcMessage(error));
     }
   },
 
@@ -474,10 +474,10 @@ export const useVaultStore = create((set, get) => ({
     const { currentVault } = get();
     if (!currentVault) return;
 
-    set({ isLoading: true, error: null });
+    set({ error: null });
     try {
       const filePath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'diagrams', filename);
-      await window.api.deleteFile(filePath);
+      await window.api.trashPath(filePath);
 
       const updatedProjects = currentVault.projects.map(proj => {
         if (proj.id === projectId) {
@@ -486,12 +486,9 @@ export const useVaultStore = create((set, get) => ({
         return proj;
       });
 
-      set({
-        currentVault: { ...currentVault, projects: updatedProjects },
-        isLoading: false
-      });
+      set({ currentVault: { ...currentVault, projects: updatedProjects } });
     } catch (error) {
-      set({ error: error.message, isLoading: false });
+      throw new Error(ipcMessage(error));
     }
   },
 
@@ -621,10 +618,10 @@ export const useVaultStore = create((set, get) => ({
     const { currentVault } = get();
     if (!currentVault) return;
 
-    set({ isLoading: true, error: null });
+    set({ error: null });
     try {
       const filePath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'docs', filename);
-      await window.api.deleteFile(filePath);
+      await window.api.trashPath(filePath);
 
       const updatedProjects = currentVault.projects.map(proj => {
         if (proj.id === projectId) {
@@ -633,12 +630,9 @@ export const useVaultStore = create((set, get) => ({
         return proj;
       });
 
-      set({
-        currentVault: { ...currentVault, projects: updatedProjects },
-        isLoading: false
-      });
+      set({ currentVault: { ...currentVault, projects: updatedProjects } });
     } catch (error) {
-      set({ error: error.message, isLoading: false });
+      throw new Error(ipcMessage(error));
     }
   },
 

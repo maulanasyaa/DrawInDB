@@ -4,7 +4,9 @@ import { DateTime } from "luxon";
 import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useVaultStore } from "../store/vaultStore";
+import { useToastStore } from "../store/toastStore";
 import EmptyState from "../components/EmptyState";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { getDiagramType, DIAGRAM_TYPES } from "../config/diagramTypes";
 import {
   FiArrowRight,
@@ -12,6 +14,7 @@ import {
   FiArrowLeft,
   FiEdit2,
   FiCheck,
+  FiTrash2,
   FiX as FiClose,
 } from "react-icons/fi";
 
@@ -105,7 +108,9 @@ export default function DiagramList() {
   const currentVault = useVaultStore((state) => state.currentVault);
   const createDiagram = useVaultStore((state) => state.createDiagram);
   const renameDiagram = useVaultStore((state) => state.renameDiagram);
+  const deleteDiagram = useVaultStore((state) => state.deleteDiagram);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deletingDiagram, setDeletingDiagram] = useState(null);
 
   // State untuk rename inline
   const [renamingFilename, setRenamingFilename] = useState(null);
@@ -167,6 +172,17 @@ export default function DiagramList() {
 
   const diagramType = getDiagramType(type);
   const diagrams = project.diagrams?.filter((d) => d.type === type) || [];
+
+  const confirmDeleteDiagram = async () => {
+    const target = deletingDiagram;
+    setDeletingDiagram(null);
+    try {
+      await deleteDiagram(projectId, target.filename);
+      useToastStore.getState().success(`Deleted "${target.name}"`);
+    } catch (err) {
+      useToastStore.getState().error(`Failed to delete: ${err.message}`);
+    }
+  };
 
   const handleCreateDiagram = async (name, dbType) => {
     try {
@@ -260,18 +276,32 @@ export default function DiagramList() {
                         : "cursor-pointer"
                     }`}
                   >
-                    {/* Tombol Edit — muncul saat hover, hanya kalau tidak sedang rename */}
+                    {/* Aksi kartu — muncul saat hover, hanya kalau tidak sedang rename */}
                     {!isRenaming && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startRename(diagram);
-                        }}
-                        className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-muted hover:text-primary hover:bg-surface-2 rounded-md opacity-0 group-hover:opacity-100 transition-all z-10"
-                        title="Rename diagram"
-                      >
-                        <FiEdit2 className="text-xs" />
-                      </button>
+                      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all z-10">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startRename(diagram);
+                          }}
+                          className="w-7 h-7 flex items-center justify-center text-muted hover:text-primary hover:bg-surface-2 rounded-md"
+                          title="Rename diagram"
+                          aria-label="Rename diagram"
+                        >
+                          <FiEdit2 className="text-xs" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingDiagram(diagram);
+                          }}
+                          className="w-7 h-7 flex items-center justify-center text-muted hover:text-danger hover:bg-danger/10 rounded-md"
+                          title="Delete diagram"
+                          aria-label="Delete diagram"
+                        >
+                          <FiTrash2 className="text-xs" />
+                        </button>
+                      </div>
                     )}
 
                     <div>
@@ -340,6 +370,16 @@ export default function DiagramList() {
           type={type}
           onClose={() => setIsModalOpen(false)}
           onCreate={handleCreateDiagram}
+        />
+      )}
+
+      {deletingDiagram && (
+        <ConfirmDialog
+          title="Delete Diagram"
+          message={`Move "${deletingDiagram.name}" to the Trash? You can restore it from your OS Trash.`}
+          confirmLabel="Delete"
+          onConfirm={confirmDeleteDiagram}
+          onCancel={() => setDeletingDiagram(null)}
         />
       )}
     </div>

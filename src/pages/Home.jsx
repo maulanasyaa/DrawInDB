@@ -4,9 +4,11 @@ import { DateTime } from "luxon";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useVaultStore } from "../store/vaultStore";
+import { useToastStore } from "../store/toastStore";
 import VaultHeader from "../components/VaultHeader";
 import EmptyState from "../components/EmptyState";
 import LoadingSpinner from "../components/LoadingSpinner";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { getDiagramType, DIAGRAM_TYPE_LIST } from "../config/diagramTypes";
 import {
   FiArrowRight,
@@ -14,6 +16,7 @@ import {
   FiUpload,
   FiFolder,
   FiChevronRight,
+  FiTrash2,
 } from "react-icons/fi";
 
 // Modal Internal untuk Create Project
@@ -72,7 +75,7 @@ function NewProjectModal({ onClose, onCreate }) {
 }
 
 // Komponen Card untuk Project
-function ProjectCard({ project, onClick }) {
+function ProjectCard({ project, onClick, onDelete }) {
   const timeAgo =
     DateTime.fromISO(project.updatedAt).toRelative() || "Just now";
   const diagramCount = project.diagrams?.length || 0;
@@ -115,7 +118,18 @@ function ProjectCard({ project, onClick }) {
         <div className="text-sm text-muted font-light flex items-center gap-2">
           {diagramCount} {diagramCount === 1 ? "diagram" : "diagrams"} &middot; {timeAgo}
         </div>
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-3 text-accent text-xl shrink-0">
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-3 text-accent text-xl shrink-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(project);
+            }}
+            className="text-muted hover:text-danger transition-colors"
+            title="Delete project"
+            aria-label={`Delete project ${project.name}`}
+          >
+            <FiTrash2 className="text-base" />
+          </button>
           <FiArrowRight />
         </div>
       </div>
@@ -138,10 +152,12 @@ function Home() {
     openVault,
     createVault,
     createProject,
+    deleteProject,
     isLoading,
     error,
   } = useVaultStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(null);
 
   useEffect(() => {
     loadRecentVaults();
@@ -160,6 +176,17 @@ function Home() {
     const paths = await window.api.openFolder();
     if (paths && paths.length > 0) {
       createVault(paths[0]);
+    }
+  };
+
+  const confirmDeleteProject = async () => {
+    const target = deletingProject;
+    setDeletingProject(null);
+    try {
+      await deleteProject(target.id);
+      useToastStore.getState().success(`Deleted "${target.name}"`);
+    } catch (err) {
+      useToastStore.getState().error(`Failed to delete: ${err.message}`);
     }
   };
 
@@ -270,11 +297,31 @@ function Home() {
                       key={project.id}
                       project={project}
                       onClick={() => navigate(`/project/${project.id}`)}
+                      onDelete={setDeletingProject}
                     />
                   ))}
                 </div>
               )}
             </div>
+
+            {deletingProject &&
+              (() => {
+                const { name, diagrams, documents } = deletingProject;
+                const d = (diagrams || []).length;
+                const m = (documents || []).length;
+
+                return (
+                  <ConfirmDialog
+                    title="Delete Project"
+                    message={`"${name}" contains ${d} diagram${d === 1 ? "" : "s"} and ${m} document${m === 1 ? "" : "s"}. Everything moves to the OS Trash.`}
+                    confirmLabel="Delete Project"
+                    requiredText={d === 0 && m === 0 ? undefined : name}
+                    inputPlaceholder={`Type "${name}" to confirm`}
+                    onConfirm={confirmDeleteProject}
+                    onCancel={() => setDeletingProject(null)}
+                  />
+                );
+              })()}
 
             {isModalOpen && (
               <NewProjectModal

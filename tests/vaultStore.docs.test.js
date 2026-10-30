@@ -33,6 +33,17 @@ function installFakeFs(seedFiles = {}) {
         if (key.startsWith(`${p}/`)) files.delete(key);
       }
     },
+    // Dipakai action hapus: pindah ke Trash OS, hapus file atau isi folder.
+    trashPath: async (p) => {
+      const exists =
+        files.has(p) || dirs.has(p) || [...files.keys()].some((k) => k.startsWith(`${p}/`));
+      if (!exists) throw new Error(`ENOENT: ${p}`);
+      files.delete(p);
+      dirs.delete(p);
+      for (const key of [...files.keys()]) {
+        if (key.startsWith(`${p}/`)) files.delete(key);
+      }
+    },
     mkdir: async (p) => {
       dirs.add(p);
     },
@@ -202,7 +213,7 @@ describe('deleteDocument', () => {
 });
 
 describe('deleteProject', () => {
-  it('memakai deleteDirectory sehingga docs/ ikut terhapus', async () => {
+  it('memindahkan folder project (beserta docs/) ke Trash', async () => {
     installFakeFs({
       ...config(),
       ...projectMeta(),
@@ -212,8 +223,8 @@ describe('deleteProject', () => {
     await useVaultStore.getState().openVault(VAULT);
 
     const calls = [];
-    const original = globalThis.window.api.deleteDirectory;
-    globalThis.window.api.deleteDirectory = async (p) => {
+    const original = globalThis.window.api.trashPath;
+    globalThis.window.api.trashPath = async (p) => {
       calls.push(p);
       return original(p);
     };
@@ -223,6 +234,55 @@ describe('deleteProject', () => {
     expect(calls).toEqual([BASE]);
     expect(await readFileRaw(`${BASE}/docs/a.json`)).toBeUndefined();
     expect(vault().projects).toEqual([]);
+  });
+});
+
+describe('deleteDiagram', () => {
+  const DIAGRAM = `${BASE}/diagrams/auth_erd.json`;
+
+  function seedDiagram() {
+    installFakeFs({
+      ...config(),
+      ...projectMeta(),
+      [DIAGRAM]: JSON.stringify({ meta: { name: 'Auth', type: 'erd' } }),
+    });
+  }
+
+  it('memindahkan file diagram ke Trash dan menghapus baris', async () => {
+    seedDiagram();
+    await useVaultStore.getState().openVault(VAULT);
+    expect(vault().projects[0].diagrams).toHaveLength(1);
+
+    const calls = [];
+    const original = globalThis.window.api.trashPath;
+    globalThis.window.api.trashPath = async (p) => {
+      calls.push(p);
+      return original(p);
+    };
+
+    await useVaultStore.getState().deleteDiagram(PROJ, 'auth_erd.json');
+
+    expect(calls).toEqual([DIAGRAM]);
+    expect(vault().projects[0].diagrams).toEqual([]);
+    expect(await readFileRaw(DIAGRAM)).toBeUndefined();
+  });
+
+  it('melempar error dan membiarkan state utuh kalau Trash ditolak', async () => {
+    seedDiagram();
+    await useVaultStore.getState().openVault(VAULT);
+    const before = vault();
+
+    globalThis.window.api.trashPath = async () => {
+      throw new Error("Error invoking remote method 'fs:trashPath': Error: Access denied: nope");
+    };
+
+    await expect(useVaultStore.getState().deleteDiagram(PROJ, 'auth_erd.json')).rejects.toThrow(
+      'Access denied: nope',
+    );
+
+    expect(vault()).toBe(before);
+    expect(vault().projects[0].diagrams).toHaveLength(1);
+    expect(useVaultStore.getState().error).toBeNull();
   });
 });
 

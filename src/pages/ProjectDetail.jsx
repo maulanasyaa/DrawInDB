@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { DateTime } from "luxon";
 import { useVaultStore } from "../store/vaultStore";
+import { useToastStore } from "../store/toastStore";
 import ConfirmDialog from "../components/ConfirmDialog";
 import EmptyState from "../components/EmptyState";
 import { FiArrowLeft, FiPlus, FiEdit2, FiCheck, FiFileText, FiTrash2 } from "react-icons/fi";
@@ -124,9 +125,14 @@ export default function ProjectDetail() {
   };
 
   const confirmDelete = async () => {
-    const filename = deletingDoc.filename;
+    const doc = deletingDoc;
     setDeletingDoc(null);
-    await deleteDocument(projectId, filename);
+    try {
+      await deleteDocument(projectId, doc.filename);
+      useToastStore.getState().success(`Deleted "${doc.name}"`);
+    } catch (err) {
+      useToastStore.getState().error(`Failed to delete: ${err.message}`);
+    }
   };
 
   return (
@@ -255,6 +261,7 @@ export default function ProjectDetail() {
                           }}
                           className="w-7 h-7 flex items-center justify-center text-muted hover:text-danger hover:bg-danger/10 rounded-md"
                           title="Delete document"
+                          aria-label="Delete document"
                         >
                           <FiTrash2 className="text-xs" />
                         </button>
@@ -327,7 +334,7 @@ export default function ProjectDetail() {
       {deletingDoc && (
         <ConfirmDialog
           title="Delete Document"
-          message={`Are you sure you want to delete "${deletingDoc.name}"? This action cannot be undone.`}
+          message={`Move "${deletingDoc.name}" to the Trash? You can restore it from your OS Trash.`}
           confirmLabel="Delete"
           onConfirm={confirmDelete}
           onCancel={() => setDeletingDoc(null)}
