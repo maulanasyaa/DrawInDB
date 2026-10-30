@@ -8,22 +8,30 @@ import {
   ARCH_NODE_TYPES,
   ARCH_MIN_SIZES,
   ARCH_RESIZABLE,
+  ARCH_HANDLE_STYLES,
 } from '../../config/architectureTypes';
 import { validateArchitecture } from '../../utils/architectureValidation';
 
-const handleProps = {
-  className:
-    '!w-3 !h-3 !bg-canvas !border-2 !border-accent !z-50 !pointer-events-auto transition-opacity opacity-0 group-hover:opacity-100',
-};
+const handleBase =
+  '!w-3 !h-3 !bg-canvas !border-2 !border-accent !z-50 !pointer-events-auto transition-opacity opacity-0 group-hover:opacity-100';
 
-/** 4 handle per node: target di atas/kiri, source di kanan/bawah. */
-function NodeHandles() {
+/**
+ * Posisi handle di tepi BENTUK, bukan tepi kotak node. `anchors` =
+ * `ARCH_HANDLE_STYLES[subtype]`: `top`/`bottom` menggeser handle di sumbu x,
+ * `left`/`right` di sumbu y (kelas bawaan `react-flow__handle-<pos>` sudah
+ * mengatur sumbu tegak lurus tepi).
+ */
+/**
+ * Handle di titik anchor bentuk (lihat `ARCH_HANDLE_ANCHORS`): `left`/`right`
+ * menggeser handle di sumbu x, `top`/`bottom` di sumbu y.
+ */
+function NodeHandles({ anchors = {} }) {
   return (
     <>
-      <Handle type="target" position={Position.Top} id="top" {...handleProps} />
-      <Handle type="source" position={Position.Right} id="right" {...handleProps} />
-      <Handle type="source" position={Position.Bottom} id="bottom" {...handleProps} />
-      <Handle type="target" position={Position.Left} id="left" {...handleProps} />
+      <Handle type="target" position={Position.Top} id="top" className={handleBase} style={anchors.top} />
+      <Handle type="source" position={Position.Right} id="right" className={handleBase} style={anchors.right} />
+      <Handle type="source" position={Position.Bottom} id="bottom" className={handleBase} style={anchors.bottom} />
+      <Handle type="target" position={Position.Left} id="left" className={handleBase} style={anchors.left} />
     </>
   );
 }
@@ -59,6 +67,8 @@ function AutoTextarea({ value, onChange, placeholder, className = '' }) {
 
 export default function ArchitectureNode({ id, data, selected }) {
   const subtype = data?.type || ARCH_NODE_TYPES.CONTAINER;
+  // Anchor handle mengikuti bentuk (lihat ARCH_HANDLE_STYLES).
+  const anchors = ARCH_HANDLE_STYLES[subtype] || {};
   const updateNodeData = useEditorStore((state) => state.updateNodeData);
   const { getNodes, getEdges } = useReactFlow();
 
@@ -85,7 +95,7 @@ export default function ArchitectureNode({ id, data, selected }) {
   if (subtype === ARCH_NODE_TYPES.PERSON) {
     return (
       <div className="w-full h-full relative group flex flex-col items-center">
-        <NodeHandles />
+        <NodeHandles anchors={anchors} />
 
         <svg viewBox="0 0 40 70" preserveAspectRatio="xMidYMid meet" className="w-1/2 h-3/5 drop-shadow-sm">
           <circle cx="20" cy="10" r="7" fill={fillColor} stroke={strokeColor} strokeWidth="2" vectorEffect="non-scaling-stroke" />
@@ -116,20 +126,34 @@ export default function ArchitectureNode({ id, data, selected }) {
   }
 
   // ===== boundary: kotak garis putus-putus berjudul (pengelompok) =====
+  // Wrapper node sudah `pointer-events: none` (store). Badan boundary juga
+  // `none` supaya klik jatuh ke edge/node di atasnya; hanya HEADER (label),
+  // TEPI (strip 6px), handle, dan NodeResizer yang `auto` — boundary tetap
+  // bisa dipilih, dipindah, dan di-resize. `opacity` tidak dipasang di node
+  // (akan ikut memudarkan edge/anak di atasnya); kepudaran ada di lapisan isi.
   if (subtype === ARCH_NODE_TYPES.BOUNDARY) {
     return (
       <div className="w-full h-full relative group">
         {resizer}
 
         <div
-          className={`absolute inset-0 border-2 border-dashed rounded-lg transition-colors z-0 pointer-events-auto ${
-            selected ? 'border-focus' : 'border-theme hover:border-focus/50'
-          }`}
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            opacity: 0.35,
-          }}
+          className="absolute inset-0 rounded-lg z-0 pointer-events-none"
+          style={{ backgroundColor: 'var(--bg-surface)', opacity: 0.35 }}
         />
+
+        <div
+          className={`absolute inset-0 rounded-lg border-2 border-dashed transition-colors z-0 pointer-events-none ${
+            selected ? 'border-focus' : 'border-theme group-hover:border-focus/50'
+          }`}
+        />
+
+        {/* Tepi: satu-satunya area badan yang menangkap klik (pilih + geser). */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute inset-x-0 top-0 h-1.5 pointer-events-auto cursor-grab" />
+          <div className="absolute inset-x-0 bottom-0 h-1.5 pointer-events-auto cursor-grab" />
+          <div className="absolute inset-y-0 left-0 w-1.5 pointer-events-auto cursor-grab" />
+          <div className="absolute inset-y-0 right-0 w-1.5 pointer-events-auto cursor-grab" />
+        </div>
 
         <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center pointer-events-none z-10">
           <AutoTextarea
@@ -149,7 +173,7 @@ export default function ArchitectureNode({ id, data, selected }) {
   if (subtype === ARCH_NODE_TYPES.DATABASE) {
     return (
       <div className="w-full h-full relative group flex flex-col items-center justify-center gap-1">
-        <NodeHandles />
+        <NodeHandles anchors={anchors} />
 
         <svg viewBox="0 0 60 40" preserveAspectRatio="xMidYMid meet" className="w-2/3 h-1/2 drop-shadow-sm">
           <ellipse cx="30" cy="8" rx="26" ry="7" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
@@ -188,7 +212,7 @@ export default function ArchitectureNode({ id, data, selected }) {
 
   return (
     <div className="w-full h-full relative group">
-      <NodeHandles />
+      <NodeHandles anchors={anchors} />
 
       <div
         className={`absolute inset-0 rounded-lg flex flex-col justify-center px-3 gap-0.5 overflow-hidden shadow-sm border transition-colors ${

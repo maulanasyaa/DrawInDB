@@ -27,20 +27,20 @@ export function validateArchitecture(nodes = [], edges = []) {
     const name = n.data?.label || subtype;
 
     // Boundary adalah pengelompok, bukan partisipan relasi.
-    if (subtype !== ARCH_NODE_TYPES.BOUNDARY && !connected.has(n.id)) {
-      nodeWarnings[n.id] = `${PREFIX}${name} has no relationships`;
-      continue;
-    }
+    if (subtype === ARCH_NODE_TYPES.BOUNDARY) continue;
 
-    if (
+    // Satu pesan per node, urutan prioritas eksplisit: relasi dulu
+    // (node yatim), lalu teknologi, lalu arah relasi Person.
+    // JANGAN pakai `continue` bertingkat tanpa alasan: Person yang punya
+    // relasi keluar sah dan tidak boleh diperingatkan (lihat test).
+    if (!connected.has(n.id)) {
+      nodeWarnings[n.id] = `${PREFIX}${name} has no relationships`;
+    } else if (
       (subtype === ARCH_NODE_TYPES.CONTAINER || subtype === ARCH_NODE_TYPES.DATABASE) &&
       !n.data?.technology?.trim()
     ) {
       nodeWarnings[n.id] = `${PREFIX}${name} has no technology`;
-      continue;
-    }
-
-    if (subtype === ARCH_NODE_TYPES.PERSON && inbound.has(n.id)) {
+    } else if (subtype === ARCH_NODE_TYPES.PERSON && inbound.has(n.id)) {
       nodeWarnings[n.id] = `${PREFIX}${name} should not receive relationships`;
     }
   }

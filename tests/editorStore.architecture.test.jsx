@@ -13,6 +13,7 @@ import {
 } from '../src/config/diagramTypes.js';
 import { EDITOR_TYPES } from '../src/config/editorTypes.jsx';
 import { CONNECT_STRATEGIES } from '../src/config/connectStrategies.js';
+import { ARCH_BOUNDARY_Z, ARCH_EDGE_Z } from '../src/utils/architectureEdgeLayout.js';
 import { seed, restore, s } from './helpers.js';
 
 const ARCH = { type: 'architecture', name: 'Online Store System' };
@@ -72,7 +73,12 @@ describe('editorStore Architecture — addArchitectureNode', () => {
     expect(node.type).toBe('architecture');
     expect(node.position).toEqual({ x: 5, y: 6 });
     expect(node.data.type).toBe(subtype);
-    expect(node.style).toEqual(ARCH_DEFAULT_SIZES[subtype]);
+    // Boundary menambah `pointerEvents: 'none'` (badan meneruskan klik ke edge).
+    expect(node.style).toEqual(
+      subtype === ARCH_NODE_TYPES.BOUNDARY
+        ? { ...ARCH_DEFAULT_SIZES[subtype], pointerEvents: 'none' }
+        : ARCH_DEFAULT_SIZES[subtype],
+    );
   });
 
   it('field default per subtype: teknologi hanya container/database, external hanya system', () => {
@@ -99,12 +105,15 @@ describe('editorStore Architecture — addArchitectureNode', () => {
     expect(database).toEqual({ type: 'database', label: 'Database', technology: '' });
   });
 
-  it('boundary ditaruh di layer paling belakang (indeks 0)', () => {
+  it('boundary ditaruh di layer paling belakang (indeks 0 + zIndex negatif)', () => {
     seed(ARCH);
     s().addArchitectureNode(ARCH_NODE_TYPES.SYSTEM, { x: 0, y: 0 });
     s().addArchitectureNode(ARCH_NODE_TYPES.BOUNDARY, { x: 0, y: 0 });
 
     expect(s().nodes.map((n) => n.data.type)).toEqual(['boundary', 'system']);
+    expect(s().nodes[0].zIndex).toBe(ARCH_BOUNDARY_Z);
+    // Node lain tidak diberi zIndex (perilaku lama).
+    expect(s().nodes[1].zIndex).toBeUndefined();
   });
 });
 
@@ -123,6 +132,7 @@ describe('editorStore Architecture — relationships', () => {
     const edge = s().flowEdges[0];
     expect(edge.id).toMatch(/^arch-/);
     expect(edge.type).toBe('architecture');
+    expect(edge.zIndex).toBe(ARCH_EDGE_Z);
     expect(edge.data).toEqual({ label: '', technology: '' });
     expect([edge.source, edge.target]).toEqual([a, b]);
   });
@@ -166,6 +176,11 @@ describe('editorStore Architecture — relationships', () => {
 
     s().onNodesChange([{ id: a, type: 'remove' }]);
 
+    expect(s().nodes.map((n) => n.id)).toEqual([b]);
+    expect(s().flowEdges).toEqual([]);
+  });
+});
+
 describe('editorStore Architecture — undo/redo', () => {
   it('satu snapshot per add, termasuk boundary', () => {
     seed(ARCH);
@@ -182,6 +197,21 @@ describe('editorStore Architecture — undo/redo', () => {
     s().redo();
     s().redo();
     expect(s().nodes.map((n) => n.data.type)).toEqual(['boundary', 'system']);
+  });
+
+  it('undo/redo mempertahankan zIndex + pointerEvents boundary', () => {
+    seed(ARCH);
+    s().addArchitectureNode(ARCH_NODE_TYPES.SYSTEM, { x: 0, y: 0 });
+    s().addArchitectureNode(ARCH_NODE_TYPES.BOUNDARY, { x: 0, y: 0 });
+
+    s().undo();
+    expect(s().nodes.map((n) => n.data.type)).toEqual(['system']);
+
+    s().redo();
+    const boundary = s().nodes[0];
+    expect(boundary.zIndex).toBe(ARCH_BOUNDARY_Z);
+    expect(boundary.style.pointerEvents).toBe('none');
+    expect(boundary.style.width).toBe(520);
   });
 
   it('connect = satu snapshot; undo membuang relationship saja', () => {
@@ -271,10 +301,96 @@ describe('editorStore Architecture — round-trip save/load', () => {
     expect(s().diagramMeta.type).toBe('architecture');
     expect(s().loadError).toBe(null);
   });
-});
 
+  it('file lama tanpa zIndex → boundary dapat zIndex rendah, edge di atasnya', async () => {
+    // File hasil versi sebelum perbaikan: boundary tanpa zIndex, edge tanpa
+    // zIndex. Format JSON lain tidak boleh berubah selain field tambahan.
+    const legacy = {
+      version: '1.0',
+      meta: { projectId: 'proj-1', name: 'store', type: 'architecture' },
+      canvas: { x: 0, y: 0, zoom: 1 },
+      tables: [],
+      relationships: [],
+      nodes: [
+        { id: 'b', type: 'architecture', position: { x: 0, y: 0 }, style: { width: 520, height: 360 }, data: { type: 'boundary', label: 'Online Store' } },
+        { id: 'w', type: 'architecture', position: { x: 40, y: 40 }, style: { width: 220, height: 120 }, data: { type: 'container', label: 'Web app', technology: 'React', description: '' } },
+        { id: 'd', type: 'architecture', position: { x: 300, y: 40 }, style: { width: 180, height: 110 }, data: { type: 'database', label: 'orders db', technology: 'PostgreSQL' } },
+      ],
+      edges: [
+        { id: 'e1', source: 'w', target: 'd', type: 'architecture', data: { label: '', technology: 'SQL' } },
+      ],
+    };
+    globalThis.window = {
+      api: {
+        pathJoin: (...p) => p.filter(Boolean).join('/'),
+        readFile: async () => JSON.stringify(legacy),
+        writeFile: async () => {},
+      },
+    };
 
-    expect(s().nodes.map((n) => n.id)).toEqual([b]);
-    expect(s().flowEdges).toEqual([]);
+    seed(ARCH);
+    await s().loadDiagram('/vault', 'proj-1', 'store_architecture.json');
+
+    const byId = Object.fromEntries(s().nodes.map((n) => [n.id, n]));
+    expect(byId.b.zIndex).toBe(ARCH_BOUNDARY_Z);
+    // Wrapper boundary harus meneruskan klik (badan), tapi ukuran tetap.
+    expect(byId.b.style).toEqual({ width: 520, height: 360, pointerEvents: 'none' });
+    expect(byId.w.zIndex).toBeUndefined();
+    expect(byId.d.zIndex).toBeUndefined();
+    expect(s().flowEdges[0].zIndex).toBe(ARCH_EDGE_Z);
+    // Data tersimpan tidak berubah selain field zIndex.
+    expect(byId.b.data).toEqual({ type: 'boundary', label: 'Online Store' });
+    expect(byId.d.data.technology).toBe('PostgreSQL');
+  });
+
+  it('zIndex yang sudah ada tidak ditimpa saat load', async () => {
+    const file = {
+      version: '1.0',
+      meta: { type: 'architecture' },
+      canvas: { x: 0, y: 0, zoom: 1 },
+      tables: [],
+      relationships: [],
+      nodes: [
+        { id: 'b', type: 'architecture', zIndex: 5, position: { x: 0, y: 0 }, data: { type: 'boundary', label: 'B' } },
+      ],
+      edges: [{ id: 'e1', source: 'b', target: 'b', type: 'architecture', zIndex: 42, data: {} }],
+    };
+    globalThis.window = {
+      api: {
+        pathJoin: (...p) => p.filter(Boolean).join('/'),
+        readFile: async () => JSON.stringify(file),
+        writeFile: async () => {},
+      },
+    };
+
+    seed(ARCH);
+    await s().loadDiagram('/vault', 'proj-1', 'x_architecture.json');
+
+    expect(s().nodes[0].zIndex).toBe(5);
+    expect(s().flowEdges[0].zIndex).toBe(42);
+  });
+
+  it('tipe lain (flowchart) tidak disentuh migrasi layer', async () => {
+    const file = {
+      version: '1.0',
+      meta: { type: 'flowchart' },
+      canvas: { x: 0, y: 0, zoom: 1 },
+      tables: [],
+      relationships: [],
+      nodes: [{ id: 'p', type: 'flowchart', position: { x: 0, y: 0 }, data: { type: 'process', label: 'P' } }],
+      edges: [],
+    };
+    globalThis.window = {
+      api: {
+        pathJoin: (...p) => p.filter(Boolean).join('/'),
+        readFile: async () => JSON.stringify(file),
+        writeFile: async () => {},
+      },
+    };
+
+    seed({ type: 'flowchart', name: 'f' });
+    await s().loadDiagram('/vault', 'proj-1', 'f_flowchart.json');
+
+    expect(s().nodes[0]).toEqual(file.nodes[0]);
   });
 });

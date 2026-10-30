@@ -6,6 +6,7 @@
 
 import { addEdge } from 'reactflow';
 import { USECASE_REL_TYPES } from './useCaseTypes';
+import { ARCH_EDGE_Z } from '../utils/architectureEdgeLayout';
 
 const usecase = (connection, { get }) => {
   const relType = get().usecaseRelType || USECASE_REL_TYPES.ASSOCIATION;
@@ -112,6 +113,8 @@ const architecture = (connection, { get }) => {
     ...connection,
     id: `arch-${connection.source}-${connection.target}-${Date.now()}`,
     type: 'architecture',
+    // Di atas node (boundary zIndex negatif), lihat architectureEdgeLayout.js.
+    zIndex: ARCH_EDGE_Z,
     data: { label: '', technology: '' },
   };
   return { flowEdges: [...get().flowEdges, newEdge] };

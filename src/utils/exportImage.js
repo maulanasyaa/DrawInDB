@@ -258,6 +258,10 @@ export async function exportDiagramAsImage(nodes, options = {}) {
     if (node.classList.contains(cls)) return false;
   }
 
+  // Placeholder label relationship Architecture ("Description [technology]")
+  // bukan isi diagram — jangan ikut ke PNG.
+  if (node.classList.contains("arch-edge-placeholder")) return false;
+
   // Skip badge peringatan node (Flowchart + State Machine). Dicek lewat
   // atribut `title` karena badge hanya ada saat node berperingatan.
   if (node.getAttribute) {

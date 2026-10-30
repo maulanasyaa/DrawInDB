@@ -63,6 +63,34 @@ describe('validateArchitecture', () => {
     expect(nodeWarnings).toEqual({});
   });
 
+  it('person dengan dua relasi keluar (contoh toko online) → tidak diperingatkan', () => {
+    const nodes = [
+      n('Person', ARCH_NODE_TYPES.PERSON),
+      n('web', ARCH_NODE_TYPES.CONTAINER, { technology: 'React' }),
+      n('api', ARCH_NODE_TYPES.CONTAINER, { technology: 'Node.js' }),
+    ];
+    const edges = [e('e1', 'Person', 'web'), e('e2', 'Person', 'api')];
+
+    expect(validateArchitecture(nodes, edges).nodeWarnings).toEqual({});
+  });
+
+  it('container berteknologi + relasi (contoh "api") → tidak diperingatkan', () => {
+    const nodes = [
+      n('web', ARCH_NODE_TYPES.CONTAINER, { technology: 'React' }),
+      n('api', ARCH_NODE_TYPES.CONTAINER, { technology: 'Node.js' }),
+      n('db', ARCH_NODE_TYPES.DATABASE, { technology: 'PostgreSQL' }),
+    ];
+    const edges = [e('e1', 'web', 'api'), e('e2', 'api', 'db')];
+
+    expect(validateArchitecture(nodes, edges).nodeWarnings).toEqual({});
+  });
+
+  it('container berteknologi tanpa relasi tetap dicek relasinya (bukan teknologi)', () => {
+    const nodes = [n('c', ARCH_NODE_TYPES.CONTAINER, { technology: 'React' })];
+
+    expect(validateArchitecture(nodes, []).nodeWarnings.c).toMatch(/has no relationships/);
+  });
+
   it('boundary tidak pernah diperingatkan (pengelompok, bukan partisipan)', () => {
     const nodes = [n('b', ARCH_NODE_TYPES.BOUNDARY)];
     const { nodeWarnings } = validateArchitecture(nodes, []);

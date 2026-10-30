@@ -19,7 +19,36 @@ import {
 } from '../config/architectureTypes';
 import { getDiagramType, isGraphType } from '../config/diagramTypes';
 import { CONNECT_STRATEGIES } from '../config/connectStrategies';
+import { ARCH_BOUNDARY_Z, ARCH_EDGE_Z } from '../utils/architectureEdgeLayout';
 import { useToastStore } from './toastStore';
+
+/** Id tipe diagram Architecture (registry `diagramTypes.js`). */
+const ARCH_TYPE_ID = 'architecture';
+
+/**
+ * Migrasi non-breaking layer Architecture saat load:
+ *  • node boundary tanpa `zIndex` → `ARCH_BOUNDARY_Z` (file lama belum punya);
+ *  • node boundary tanpa `style.pointerEvents` → `'none'` (klik badan harus
+ *    meneruskan ke edge; header/tepi/handle/resizer tetap `auto`);
+ *  • edge tanpa `zIndex` → `ARCH_EDGE_Z` (edge di atas node, termasuk boundary).
+ * Hanya menambah field opsional; field lain tidak berubah. File tetap bisa
+ * dibuka versi lama (field tak dikenal diabaikan React Flow).
+ */
+export function migrateArchLayer(nodes = [], edges = []) {
+  return {
+    nodes: nodes.map((n) => {
+      if (n?.data?.type !== ARCH_NODE_TYPES.BOUNDARY) return n;
+      const patched = { ...n };
+      if (typeof patched.zIndex !== 'number') patched.zIndex = ARCH_BOUNDARY_Z;
+      const { width, height } = patched.style || {};
+      if (patched.style?.pointerEvents !== 'none') {
+        patched.style = { width, height, ...patched.style, pointerEvents: 'none' };
+      }
+      return patched;
+    }),
+    edges: edges.map((e) => (typeof e.zIndex === 'number' ? e : { ...e, zIndex: ARCH_EDGE_Z })),
+  };
+}
 
 /**
  * Bersihkan flag `fk` pada kolom yang tadinya jadi target relasi yang dihapus.
@@ -220,12 +249,17 @@ export const useEditorStore = create((set, get) => ({
         parsedCanvas = { x: parsedCanvas.pan.x || 0, y: parsedCanvas.pan.y || 0, zoom: parsedCanvas.zoom || 1 };
       }
 
+      const isArch = data.meta?.type === ARCH_TYPE_ID;
+      const layers = isArch
+        ? migrateArchLayer(data.nodes || [], data.edges || [])
+        : { nodes: data.nodes || [], edges: data.edges || [] };
+
       set({
         diagramMeta: data.meta,
         tables: (data.tables || []).map(t => ({ ...t, type: 'table' })),
         relationships: data.relationships || [],
-        nodes: data.nodes || [],
-        flowEdges: data.edges || [],
+        nodes: layers.nodes,
+        flowEdges: layers.edges,
         canvasState: parsedCanvas,
         isLoading: false,
         isDirty: false,
@@ -587,10 +621,18 @@ export const useEditorStore = create((set, get) => ({
     // Satu snapshot per aksi, untuk kedua jalur (boundary & bukan).
     get().commitHistory('action');
 
-    // Boundary adalah pengelompok visual: taruh di layer paling belakang
-    // (pola systemBoundary Use Case — bukan parent node React Flow).
+    // Boundary adalah pengelompok visual: layer paling belakang (zIndex
+    // negatif) DAN wrapper node `pointer-events: none` — NodeWrapper React Flow
+    // menulis inline `pointerEvents: 'all'`, dan `...node.style` menang, jadi
+    // hanya lewat `style` badan boundary bisa meneruskan klik ke edge di
+    // atasnya. Header/tepi/handle/NodeResizer mengembalikan `auto` sendiri.
     if (subtype === ARCH_NODE_TYPES.BOUNDARY) {
-      set({ nodes: [newNode, ...nodes] });
+      set({
+        nodes: [
+          { ...newNode, zIndex: ARCH_BOUNDARY_Z, style: { ...size, pointerEvents: 'none' } },
+          ...nodes,
+        ],
+      });
     } else {
       set({ nodes: [...nodes, newNode] });
     }
