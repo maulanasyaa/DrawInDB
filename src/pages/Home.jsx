@@ -6,9 +6,10 @@ import { createPortal } from "react-dom";
 import { useVaultStore } from "../store/vaultStore";
 import { useToastStore } from "../store/toastStore";
 import ConfirmDialog from "../components/ConfirmDialog";
+import EmptyState from "../components/EmptyState";
 import { collectRecentWork } from "../utils/recentWork";
 import { DIAGRAM_TYPE_LIST, getDiagramType } from "../config/diagramTypes";
-import { FiPlus, FiTrash2, FiChevronRight } from "react-icons/fi";
+import { FiPlus, FiTrash2, FiChevronRight, FiLayers } from "react-icons/fi";
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -75,9 +76,11 @@ function Brand() {
   );
 }
 
-function NewProjectModal({ onClose, onCreate }) {
+function NewProjectModal({ onClose, onCreate, isBusy }) {
   const [name, setName] = useState("");
-  const handleCreate = () => name.trim() && onCreate(name.trim());
+  const handleCreate = () => {
+    if (name.trim() && !isBusy) onCreate(name.trim());
+  };
 
   return createPortal(
     <div className="fixed inset-0 bg-base/80 flex items-center justify-center z-50 p-4 backdrop-blur-md animate-fade-in">
@@ -119,10 +122,10 @@ function NewProjectModal({ onClose, onCreate }) {
           <button
             type="button"
             onClick={handleCreate}
-            disabled={!name.trim()}
+            disabled={!name.trim() || isBusy}
             className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed hover-lift"
           >
-            Create Project
+            {isBusy ? "Creating…" : "Create Project"}
           </button>
         </div>
       </div>
@@ -148,7 +151,7 @@ function RecentTile({ item }) {
   return (
     <Link
       to={to}
-      className="group shrink-0 w-52 h-24 rounded-2xl border border-theme bg-surface p-4 flex flex-col justify-between transition-colors hover:border-focus hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="group w-full h-24 rounded-2xl border border-theme bg-surface p-4 flex flex-col justify-between transition-colors hover:border-focus hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       <span className="font-mono text-[10px] text-muted">{itemLabel(item)}</span>
       <span className="min-w-0">
@@ -181,7 +184,7 @@ function ProjectCard({ project, onDelete }) {
           {sortedTypes.map((type) => (
             <span
               key={type}
-              className="whitespace-nowrap shrink-0 font-mono text-[10px] px-1.5 py-0.5 rounded border border-theme bg-base text-muted"
+              className="whitespace-nowrap shrink-0 font-mono text-[9px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full border border-theme bg-surface-2 text-primary"
             >
               {getDiagramType(type).badge}
             </span>
@@ -226,9 +229,12 @@ function Landing({ isLoading, error, onOpen, onCreate }) {
       transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
       className="relative flex-1 min-h-0 overflow-y-auto"
     >
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="orb orb-lavender w-[800px] h-[800px] -top-96 -left-64 mix-blend-multiply" />
-        <div className="orb orb-peach w-[600px] h-[600px] top-[55%] right-[-200px] mix-blend-multiply" />
+      {/* `fixed`, bukan `absolute`: layer ini tidak boleh ikut container scroll.
+          Kalau ikut, kotak clip-nya (setinggi scrollport) bergeser naik saat
+          scroll dan memotong orb peach di garis horizontal tengah layar. */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="orb orb-lavender w-[800px] h-[800px] -top-96 -left-64" />
+        <div className="orb orb-peach w-[600px] h-[600px] top-[55%] right-[-200px]" />
       </div>
 
       <div className="absolute top-8 left-8 z-10">
@@ -266,18 +272,31 @@ function Landing({ isLoading, error, onOpen, onCreate }) {
           </button>
         </div>
 
-        <p className="text-xs text-muted mb-16">
+        <p className="text-xs text-muted">
           A vault is any folder that contains a .drawindb directory.
         </p>
 
+        <div className="w-16 h-px bg-theme mt-12 mb-8" />
+        <ul className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4 max-w-xl">
+          {DIAGRAM_TYPE_LIST.map((type) => {
+            const Icon = type.icon;
+            return (
+              <li key={type.id} className="flex items-center gap-2 text-[13px] text-muted">
+                <Icon aria-hidden="true" className="text-base" />
+                {type.label}
+              </li>
+            );
+          })}
+        </ul>
+
         {error && (
-          <p role="alert" className="mb-10 text-sm text-danger">
+          <p role="alert" className="mt-10 text-sm text-danger">
             {error}
           </p>
         )}
 
         {recentVaults.length > 0 && (
-          <div className="w-full max-w-2xl bg-surface border border-theme rounded-[24px] p-8 shadow-2xl shadow-black/[0.02]">
+          <div className="mt-10 w-full max-w-2xl bg-surface border border-theme rounded-[24px] p-8 shadow-2xl shadow-black/[0.02]">
             <h2 className="font-display text-xl text-primary tracking-tight mb-6">
               Recent Vaults
             </h2>
@@ -333,12 +352,17 @@ function VaultView({ vault, onSwitch, onNewProject, onDelete, error }) {
       className="flex-1 min-h-0 overflow-y-auto"
     >
       <div className="w-full max-w-5xl mx-auto px-10 py-12">
-        <div className="flex items-start justify-between gap-6">
+        <header className="flex items-start justify-between gap-6">
           <div className="min-w-0">
             <div className="mb-4">
               <Brand />
             </div>
-            <h1 className="font-display section-title text-primary truncate">{vault.name}</h1>
+            <h1 className="font-display section-title text-primary truncate" title={vault.name}>
+              {vault.name}
+            </h1>
+            <p className="mt-1 truncate font-mono text-[11px] text-muted" title={vault.path}>
+              {vault.path}
+            </p>
             <p className="mt-2 text-sm text-muted tabular-nums">
               {plural(totals.diagrams, "diagram", "diagrams")} ·{" "}
               {plural(totals.documents, "document", "documents")} ·{" "}
@@ -352,7 +376,7 @@ function VaultView({ vault, onSwitch, onNewProject, onDelete, error }) {
           >
             Switch vault
           </button>
-        </div>
+        </header>
 
         {error && (
           <p
@@ -366,7 +390,7 @@ function VaultView({ vault, onSwitch, onNewProject, onDelete, error }) {
         {items.length > 0 && (
           <section className="mt-14">
             <h2 className="font-display text-xl text-primary mb-4">Continue</h2>
-            <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {items.map((item) => (
                 <RecentTile key={`${item.kind}-${item.projectId}-${item.filename}`} item={item} />
               ))}
@@ -384,10 +408,12 @@ function VaultView({ vault, onSwitch, onNewProject, onDelete, error }) {
           </div>
 
           {projectCount === 0 ? (
-            <div className="premium-card p-12 text-center">
-              <p className="text-secondary font-light">
-                Empty vault. A project groups the diagrams for one system.
-              </p>
+            <div className="premium-card p-12 flex items-center justify-center">
+              <EmptyState
+                icon={<FiLayers />}
+                title="No projects yet"
+                description="A project groups the diagrams for one system. Create one to get started."
+              />
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -507,7 +533,11 @@ function Home() {
       )}
 
       {isModalOpen && (
-        <NewProjectModal onClose={() => setIsModalOpen(false)} onCreate={handleCreateProject} />
+        <NewProjectModal
+          onClose={() => setIsModalOpen(false)}
+          onCreate={handleCreateProject}
+          isBusy={isLoading}
+        />
       )}
     </div>
   );
