@@ -125,6 +125,26 @@ describe('editorStore Sequence — messages', () => {
     expect(s().messages.every((m) => m.kind === 'sync')).toBe(true);
   });
 
+  it('peserta terpilih menjadi from default; tidak self saat peserta >= 2', () => {
+    reset();
+    s().addSequenceParticipant();
+    s().addSequenceParticipant();
+    s().addSequenceParticipant();
+    const [, b, c] = s().participants.map((p) => p.id);
+
+    s().setSelectedSequenceItem({ type: 'participant', id: b });
+    s().addSequenceMessage({}, null);
+
+    expect(s().messages[0]).toMatchObject({ from: b, to: c });
+  });
+
+  it('tambah setelah pesan terpilih melanjutkan arah balasan', () => {
+    const { a, b, msg } = seedPair(); // a → b
+    s().addSequenceMessage({}, msg);
+
+    expect(s().messages[1]).toMatchObject({ from: b, to: a });
+  });
+
   it('afterId menyisipkan tepat setelah pesan terpilih', () => {
     const { a, b, msg } = seedPair();
     s().addSequenceMessage({ from: b, to: a, label: 'balasan' }, msg);

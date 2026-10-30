@@ -25,6 +25,8 @@ export const SQ_DEFAULT_MESSAGE_LABEL = 'Message';
 /** Ukuran layout (px). Dipakai `utils/sequence.js` dan renderer SVG. */
 export const SQ_LAYOUT = {
   PAD: 48,
+  // Ruang di atas kotak peserta: ring seleksi (y=-3) dan badge peringatan (cy=6).
+  TOP_PAD: 32,
   MIN_PITCH: 140,
   MIN_BOX_W: 120,
   BOX_H: 52,
@@ -32,7 +34,8 @@ export const SQ_LAYOUT = {
   ROW_H: 44,
   TAIL_PAD: 24,
   SELF_W: 56,
-  MIN_LIFELINE: 40,
+  // Ruang minimum garis hidup di bawah kotak: ≈3 baris pesan.
+  MIN_LIFELINE: 156, // HEADER_GAP + 3 * ROW_H
   MIN_WIDTH: 480,
   MIN_HEIGHT: 280,
 };

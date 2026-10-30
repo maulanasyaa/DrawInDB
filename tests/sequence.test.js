@@ -4,6 +4,7 @@ import {
   emptySequence,
   estimateTextWidth,
   layoutSequence,
+  pickMessageEndpoints,
   validateSequence,
 } from '../src/utils/sequence.js';
 import { SQ_LAYOUT } from '../src/config/sequenceTypes.js';
@@ -169,14 +170,29 @@ describe('layoutSequence', () => {
   });
 
   it('garis hidup berakhir setelah baris terakhir + margin', () => {
+    // 4 pesan: baris terakhir (y=240) + TAIL_PAD melewati MIN_LIFELINE.
+    const l = layoutSequence({
+      participants: [P('a', 'A'), P('b', 'B')],
+      messages: [M('m1', 'a', 'b'), M('m2', 'a', 'b'), M('m3', 'a', 'b'), M('m4', 'a', 'b')],
+    });
+    const last = l.messages[l.messages.length - 1];
+    expect(l.lifelineBottom).toBe(last.y + SQ_LAYOUT.TAIL_PAD);
+    expect(l.lifelineTop).toBe(SQ_LAYOUT.TOP_PAD + SQ_LAYOUT.BOX_H);
+    expect(l.height).toBeGreaterThan(l.lifelineBottom);
+  });
+
+  it('diagram pendek: garis hidup di-clamp ke MIN_LIFELINE', () => {
     const l = layoutSequence({
       participants: [P('a', 'A'), P('b', 'B')],
       messages: [M('m1', 'a', 'b'), M('m2', 'a', 'b')],
     });
-    const last = l.messages[l.messages.length - 1];
-    expect(l.lifelineBottom).toBe(last.y + SQ_LAYOUT.TAIL_PAD);
-    expect(l.lifelineTop).toBe(SQ_LAYOUT.BOX_H);
-    expect(l.height).toBeGreaterThan(l.lifelineBottom);
+    expect(l.lifelineBottom).toBe(l.lifelineTop + SQ_LAYOUT.MIN_LIFELINE);
+  });
+
+  it('peserta diberi top padding; lifeline mulai di bawah kotak', () => {
+    const l = layoutSequence({ participants: [P('a', 'A'), P('b', 'B')] });
+    expect(l.participants.map((p) => p.y)).toEqual([SQ_LAYOUT.TOP_PAD, SQ_LAYOUT.TOP_PAD]);
+    expect(l.lifelineTop).toBe(SQ_LAYOUT.TOP_PAD + SQ_LAYOUT.BOX_H);
   });
 
   it('tanpa pesan, garis hidup tetap punya panjang minimum', () => {
@@ -192,6 +208,66 @@ describe('layoutSequence', () => {
     // boxWidth = 500 + 32 padding; pitch = boxWidth + 48 gap.
     expect(l.boxWidth).toBe(532);
     expect(l.pitch).toBe(580);
+  });
+});
+
+describe('pickMessageEndpoints', () => {
+  const three = [P('a', 'A'), P('b', 'B'), P('c', 'C')];
+
+  it('tanpa konteks → dua peserta pertama', () => {
+    expect(pickMessageEndpoints({ participants: three })).toEqual({ from: 'a', to: 'b' });
+  });
+
+  it('peserta terpilih jadi from, to = peserta berikutnya', () => {
+    expect(pickMessageEndpoints({ participants: three }, { selectedParticipantId: 'b' })).toEqual({
+      from: 'b',
+      to: 'c',
+    });
+  });
+
+  it('peserta terakhir → siklik ke peserta pertama', () => {
+    expect(pickMessageEndpoints({ participants: three }, { selectedParticipantId: 'c' })).toEqual({
+      from: 'c',
+      to: 'a',
+    });
+  });
+
+  it('override manual menang, termasuk self-message', () => {
+    expect(pickMessageEndpoints({ participants: three }, { from: 'c', to: 'c' })).toEqual({
+      from: 'c',
+      to: 'c',
+    });
+  });
+
+  it('id tak dikenal diabaikan', () => {
+    expect(
+      pickMessageEndpoints({ participants: three }, { from: 'ghost', selectedParticipantId: 'b' }),
+    ).toEqual({ from: 'b', to: 'c' });
+  });
+
+  it('anchor afterId melanjutkan dari .to pesan itu', () => {
+    const messages = [{ id: 'm', from: 'a', to: 'c' }];
+    expect(pickMessageEndpoints({ participants: three, messages }, { afterId: 'm' })).toEqual({
+      from: 'c',
+      to: 'a',
+    });
+  });
+
+  it('anchor .to hantu → pakai .from anchor', () => {
+    const participants = [P('a', 'A'), P('b', 'B')];
+    const messages = [{ id: 'm', from: 'a', to: 'ghost' }];
+    expect(pickMessageEndpoints({ participants, messages }, { afterId: 'm' })).toEqual({
+      from: 'a',
+      to: 'b',
+    });
+  });
+
+  it('satu peserta → self', () => {
+    expect(pickMessageEndpoints({ participants: [P('a', 'A')] })).toEqual({ from: 'a', to: 'a' });
+  });
+
+  it('tanpa peserta → null', () => {
+    expect(pickMessageEndpoints({})).toBe(null);
   });
 });
 

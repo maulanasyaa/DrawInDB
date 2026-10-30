@@ -188,7 +188,8 @@ export default function SequenceCanvas() {
             <line
               key={`ll-${p.id}`}
               x1={p.x}
-              y1={layout.lifelineTop + SQ_LAYOUT.BOX_H}
+              // lifelineTop sudah = TOP_PAD + BOX_H (bawah kotak peserta).
+              y1={layout.lifelineTop}
               x2={p.x}
               y2={layout.lifelineBottom}
               stroke={C.border}
@@ -202,6 +203,7 @@ export default function SequenceCanvas() {
           {layout.participants.map((p) => (
             <g
               key={p.id}
+              transform={`translate(0 ${p.y})`}
               onClick={(e) => {
                 e.stopPropagation();
                 setSelected({ type: 'participant', id: p.id });
@@ -370,7 +372,13 @@ export default function SequenceCanvas() {
       </div>
 
       {/* Kontrol zoom — UI, dibuang saat export. */}
-      <div className="absolute bottom-5 right-5 z-10 flex items-center gap-1 bg-surface border border-theme rounded-lg shadow-lg p-1">
+      {/* Kiri bawah supaya tidak bentrok dengan tombol tema global (kanan
+          bawah) — sama dengan posisi default <Controls> React Flow. */}
+      <div
+        className={`absolute bottom-5 z-10 flex items-center gap-1 bg-surface border border-theme rounded-lg shadow-lg p-1 ${
+          isSidebarOpen ? 'left-[340px]' : 'left-5'
+        }`}
+      >
         <button
           type="button"
           onClick={() => setScale((s) => clampScale(s - 0.1))}

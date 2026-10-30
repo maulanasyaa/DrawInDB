@@ -72,14 +72,14 @@ export function estimateTextWidth(text, fontSize = 13) {
  * @returns {{
  *   width: number, height: number, pitch: number, boxWidth: number,
  *   lifelineTop: number, lifelineBottom: number,
- *   participants: Array<{id,name,kind,x,width}>,
+ *   participants: Array<{id,name,kind,x,y,width}>,
  *   messages: Array<{id,from,to,label,kind,index,y,x1,x2,self,unresolved}>
  * }}
  */
 export function layoutSequence(data = {}, { measure = estimateTextWidth } = {}) {
   const { participants, messages } = normalizeSequence(data);
   const L = SQ_LAYOUT;
-  const lifelineTop = L.BOX_H;
+  const lifelineTop = L.TOP_PAD + L.BOX_H;
 
   if (participants.length === 0) {
     return {
@@ -104,6 +104,7 @@ export function layoutSequence(data = {}, { measure = estimateTextWidth } = {}) 
   const columns = participants.map((p, i) => ({
     ...p,
     x: L.PAD + boxWidth / 2 + i * pitch,
+    y: L.TOP_PAD,
     width: boxWidth,
   }));
   const xById = new Map(columns.map((p) => [p.id, p.x]));
@@ -146,6 +147,31 @@ export function layoutSequence(data = {}, { measure = estimateTextWidth } = {}) 
     participants: columns,
     messages: rows,
   };
+}
+
+/**
+ * Endpoint pesan baru. Prioritas from: override manual → peserta terpilih →
+ * `to` pesan anchor (`afterId` / pesan terakhir) → `from` anchor → peserta
+ * pertama. `to` = override manual atau peserta berikutnya (siklik).
+ * Self-message hanya bila peserta tinggal satu atau dipilih manual.
+ * Id tak dikenal diabaikan. null bila tanpa peserta.
+ */
+export function pickMessageEndpoints(
+  { participants = [], messages = [] } = {},
+  { afterId = null, selectedParticipantId = null, from = null, to = null } = {},
+) {
+  if (participants.length === 0) return null;
+  const ids = new Set(participants.map((p) => p.id));
+  const valid = (id) => (typeof id === 'string' && ids.has(id) ? id : null);
+  const anchor = messages.find((m) => m.id === afterId) ?? messages[messages.length - 1];
+  const start = valid(from)
+    || valid(selectedParticipantId)
+    || valid(anchor?.to)
+    || valid(anchor?.from)
+    || participants[0].id;
+  const end = valid(to)
+    || participants[(participants.findIndex((p) => p.id === start) + 1) % participants.length].id;
+  return { from: start, to: end };
 }
 
 /**

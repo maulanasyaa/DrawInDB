@@ -24,7 +24,7 @@ import {
   SQ_DEFAULT_MESSAGE_LABEL,
   SQ_MESSAGE_KINDS,
 } from '../config/sequenceTypes';
-import { normalizeSequence } from '../utils/sequence';
+import { normalizeSequence, pickMessageEndpoints } from '../utils/sequence';
 import { getDiagramType, isGraphType } from '../config/diagramTypes';
 import { CONNECT_STRATEGIES } from '../config/connectStrategies';
 import { ARCH_BOUNDARY_Z, ARCH_EDGE_Z } from '../utils/architectureEdgeLayout';
@@ -765,14 +765,22 @@ export const useEditorStore = create((set, get) => ({
 
   /** Tambah pesan di akhir, atau tepat setelah `afterId` (item terpilih). */
   addSequenceMessage: (patch = {}, afterId = null) => {
-    const { participants, messages, _vaultPath, _projectId, _filename } = get();
-    if (participants.length === 0) return; // pesan butuh peserta
+    const { participants, messages, selectedSequenceItem, _vaultPath, _projectId, _filename } = get();
+    const endpoints = pickMessageEndpoints(
+      { participants, messages },
+      {
+        afterId,
+        selectedParticipantId:
+          selectedSequenceItem?.type === 'participant' ? selectedSequenceItem.id : null,
+        from: patch.from,
+        to: patch.to,
+      },
+    );
+    if (!endpoints) return; // pesan butuh peserta
 
-    const from = patch.from || participants[0].id;
     const message = {
       id: `sqm-${Date.now()}`,
-      from,
-      to: patch.to || (participants[1] || participants[0]).id,
+      ...endpoints,
       label: patch.label ?? SQ_DEFAULT_MESSAGE_LABEL,
       kind: SQ_MESSAGE_KINDS.includes(patch.kind) ? patch.kind : SQ_DEFAULT_MESSAGE_KIND,
     };
