@@ -1,12 +1,18 @@
 import { create } from 'zustand';
-import { applyNodeChanges, applyEdgeChanges, addEdge } from 'reactflow';
+import { applyNodeChanges, applyEdgeChanges } from 'reactflow';
 import {
   USECASE_NODE_TYPES,
   USECASE_REL_TYPES,
   USECASE_DEFAULT_SIZES,
   USECASE_DEFAULT_LABELS,
 } from '../config/useCaseTypes';
-import { isGraphType } from '../config/diagramTypes';
+import {
+  SM_NODE_TYPES,
+  SM_DEFAULT_SIZES,
+  SM_DEFAULT_LABELS,
+} from '../config/stateMachineTypes';
+import { getDiagramType, isGraphType } from '../config/diagramTypes';
+import { CONNECT_STRATEGIES } from '../config/connectStrategies';
 import { useToastStore } from './toastStore';
 
 /**
@@ -520,6 +526,42 @@ export const useEditorStore = create((set, get) => ({
     get().autoSave();
   },
 
+  // === STATE MACHINE: tambah node ===
+  addStateMachineNode: (subtype, position) => {
+    const { nodes, _vaultPath, _projectId, _filename } = get();
+    const size = SM_DEFAULT_SIZES[subtype] || SM_DEFAULT_SIZES[SM_NODE_TYPES.STATE];
+    const baseLabel = SM_DEFAULT_LABELS[subtype] ?? '';
+
+    const newNode = {
+      id: `sm-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'statemachine',
+      position,
+      data:
+        subtype === SM_NODE_TYPES.STATE
+          ? { type: subtype, label: baseLabel, entry: '', exit: '', do: '' }
+          : { type: subtype, label: baseLabel },
+      style: { width: size.width, height: size.height },
+    };
+
+    get().commitHistory('action');
+    set({ nodes: [...nodes, newNode] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Label transition ("event [guard] / action"). Satu snapshot per burst ketikan. */
+  setStateMachineEdgeLabel: (edgeId, label) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
+    set((state) => ({
+      flowEdges: state.flowEdges.map((e) =>
+        e.id === edgeId ? { ...e, data: { ...e.data, label } } : e,
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
   // === USE CASE: replace all (untuk import JSON) ===
   replaceUseCaseGraph: ({ nodes, edges, canvasState }) => {
     const { _vaultPath, _projectId, _filename } = get();
@@ -634,84 +676,16 @@ export const useEditorStore = create((set, get) => ({
   onConnect: (connection) => {
     const { _vaultPath, _projectId, _filename, diagramMeta } = get();
     const type = diagramMeta?.type;
-    // Snapshot diambil sebelum cabang mana pun mengubah state; baru dipakai
-    // bila koneksi valid (cabang ERD bisa batal).
+    // Snapshot diambil sebelum strategi mengubah state; baru dipakai bila
+    // koneksi diterima (strategi ERD bisa menolak).
     const preConnect = captureSnapshot(get());
 
-    if (type === 'usecase') {
-      const relType = get().usecaseRelType || USECASE_REL_TYPES.ASSOCIATION;
-      const newEdge = {
-        ...connection,
-        id: `uce-${connection.source}-${connection.target}-${Date.now()}`,
-        type: 'usecase',
-        data: { relType },
-      };
-      set({ flowEdges: addEdge(newEdge, get().flowEdges) });
-    } else if (type === 'flowchart') {
-      const sourceNode = get().nodes.find(n => n.id === connection.source);
-      let edgeLabel = '';
+    const strategy = CONNECT_STRATEGIES[getDiagramType(type).id];
+    const patch = strategy ? strategy(connection, { get }) : null;
+    if (!patch) return;
 
-      if (sourceNode?.data?.type === 'decision') {
-        const existingOutEdges = get().flowEdges.filter(e => e.source === sourceNode.id);
-        edgeLabel = existingOutEdges.length === 0 ? 'Yes' : 'No';
-      }
-
-      const newEdge = {
-        ...connection,
-        id: `e-${connection.source}-${connection.target}-${Date.now()}`,
-        label: edgeLabel,
-        type: 'smoothstep',
-        style: { stroke: '#a1a1aa', strokeWidth: 1.5 },
-        labelStyle: { fill: '#e4e4e7', fontWeight: 600, fontSize: 12 },
-        labelBgStyle: { fill: '#18181b', stroke: '#3f3f46', strokeWidth: 1 },
-        labelBgPadding: [6, 4],
-        labelBgBorderRadius: 4,
-        markerEnd: { type: 'arrowclosed', color: '#a1a1aa' }
-      };
-
-      set({ flowEdges: addEdge(newEdge, get().flowEdges) });
-    } else {
-      // ERD: Set FK on target column like old version
-      const { tables, relationships } = get();
-      const sourceTable = tables.find(t => t.id === connection.source);
-      const targetTable = tables.find(t => t.id === connection.target);
-      const sourceCol = sourceTable?.data.columns.find(c => c.id === connection.sourceHandle);
-      const targetCol = targetTable?.data.columns.find(c => c.id === connection.targetHandle);
-
-      if (!sourceCol || !targetCol) return;
-
-      // Arah relasi selalu source → target: FK jatuh ke kolom TARGET apa pun
-      // status PK-nya. `pk` hanya dipakai untuk menentukan tipe kolom acuan.
-      // Sengaja tidak memakai heuristik PK untuk memindah arah; `fk` harus
-      // konsisten dengan clearOrphanFk yang membersihkan kolom target.
-      const parentCol = sourceCol;
-      const childCol = targetCol;
-      const childTableId = connection.target;
-
-      const edge = {
-        ...connection,
-        id: `rel-${Date.now()}`,
-        type: 'smoothstep',
-        animated: false,
-        style: { strokeWidth: 1.5 }
-      };
-
-      const updatedTables = tables.map(t => {
-        if (t.id === childTableId) {
-          const updatedCols = t.data.columns.map(c =>
-            c.id === childCol.id ? { ...c, type: parentCol.type, fk: true } : c
-          );
-          return { ...t, data: { ...t.data, columns: updatedCols } };
-        }
-        return t;
-      });
-
-      set({
-        relationships: addEdge(edge, relationships),
-        tables: updatedTables,
-      });
-    }
-    // Satu snapshot per koneksi (setelah kemungkinan batal di cabang ERD).
+    set(patch);
+    // Satu snapshot per koneksi.
     set((state) => ({ historyPast: pushStack(state.historyPast, preConnect), historyFuture: [] }));
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();

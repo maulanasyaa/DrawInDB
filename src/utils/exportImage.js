@@ -258,13 +258,17 @@ export async function exportDiagramAsImage(nodes, options = {}) {
     if (node.classList.contains(cls)) return false;
   }
 
-  // Skip warning icon di FlowchartNode
+  // Skip badge peringatan node (Flowchart + State Machine). Dicek lewat
+  // atribut `title` karena badge hanya ada saat node berperingatan.
   if (node.getAttribute) {
     const title = node.getAttribute("title") || "";
     if (
       title === "Label cannot be empty" ||
       title === "Node is not connected to any process" ||
-      title.startsWith("Decision should have")
+      title.startsWith("Decision should have") ||
+      title.startsWith("State has no") ||
+      title.startsWith("Final state cannot") ||
+      title.startsWith("State machine has more than one")
     ) {
       return false;
     }

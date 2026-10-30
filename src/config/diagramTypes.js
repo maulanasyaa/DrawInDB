@@ -1,6 +1,6 @@
 // Single source of truth untuk tipe diagram. Tambah tipe baru dengan menambah satu entri di sini.
 
-import { FiDatabase, FiGitBranch, FiUsers } from "react-icons/fi";
+import { FiActivity, FiDatabase, FiGitBranch, FiUsers } from "react-icons/fi";
 
 export const DIAGRAM_TYPES = {
   erd: {
@@ -41,6 +41,19 @@ export const DIAGRAM_TYPES = {
     dataShape: "graph",
     hasDbType: false,
     exports: { png: false, sql: false, json: true },
+  },
+  statemachine: {
+    id: "statemachine",
+    label: "State Machine",
+    labelPlural: "State Machines",
+    placeholder: "Order Status",
+    badge: "STATE MACHINE",
+    backLabel: "State Machine",
+    description: "Describe an object's lifecycle: states, transitions, events, and guards.",
+    icon: FiActivity,
+    dataShape: "graph",
+    hasDbType: false,
+    exports: { png: true, sql: false, json: false },
   },
 };
 

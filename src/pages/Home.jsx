@@ -7,7 +7,7 @@ import { useVaultStore } from "../store/vaultStore";
 import VaultHeader from "../components/VaultHeader";
 import EmptyState from "../components/EmptyState";
 import LoadingSpinner from "../components/LoadingSpinner";
-import { getDiagramType } from "../config/diagramTypes";
+import { getDiagramType, DIAGRAM_TYPE_LIST } from "../config/diagramTypes";
 import {
   FiArrowRight,
   FiPlus,
@@ -80,8 +80,10 @@ function ProjectCard({ project, onClick }) {
   // Ambil tipe diagram unik yang ada di dalam project ini
   const uniqueTypes = [...new Set((project.diagrams || []).map((d) => d.type))];
 
-  // Urutkan badge sesuai DIAGRAM_TYPE_LIST (erd, flowchart, usecase)
-  const typeOrder = { erd: 0, flowchart: 1, usecase: 2 };
+  // Urutkan badge sesuai urutan registry (DIAGRAM_TYPE_LIST).
+  const typeOrder = Object.fromEntries(
+    DIAGRAM_TYPE_LIST.map((t, i) => [t.id, i]),
+  );
   const sortedTypes = uniqueTypes.sort((a, b) => (typeOrder[a] ?? 99) - (typeOrder[b] ?? 99));
 
   return (

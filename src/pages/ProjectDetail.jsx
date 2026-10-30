@@ -55,7 +55,8 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* 4 tipe di registry: satu baris di layar lebar, 2x2 di menengah. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {DIAGRAM_TYPE_LIST.map((diagramType) => {
             const diagramCount =
               project.diagrams?.filter((d) => d.type === diagramType.id).length || 0;

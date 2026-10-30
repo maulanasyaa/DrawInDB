@@ -47,6 +47,12 @@ async function buildAndSave(meta) {
     s().addFlowNode('decision', { x: 0, y: 200 });
     const [a, b] = s().nodes.map((n) => n.id);
     s().onConnect({ source: a, target: b });
+  } else if (meta.type === 'statemachine') {
+    s().addStateMachineNode('initial', { x: 0, y: 0 });
+    s().addStateMachineNode('state', { x: 200, y: 0 });
+    const [a, b] = s().nodes.map((n) => n.id);
+    s().onConnect({ source: a, target: b });
+    s().setStateMachineEdgeLabel(s().flowEdges[0].id, 'submit');
   } else {
     s().addUseCaseNode('actor', { x: 0, y: 0 });
     s().addUseCaseNode('useCase', { x: 200, y: 0 });
@@ -72,6 +78,7 @@ const META = {
   erd: { type: 'erd', name: 'ERD', db_type: 'postgresql' },
   flowchart: { type: 'flowchart', name: 'Flow' },
   usecase: { type: 'usecase', name: 'UC' },
+  statemachine: { type: 'statemachine', name: 'Order Status' },
 };
 
 let files;
@@ -84,7 +91,7 @@ afterEach(() => {
 });
 
 describe('round-trip save → load', () => {
-  it.each(['erd', 'flowchart', 'usecase'])(
+  it.each(['erd', 'flowchart', 'usecase', 'statemachine'])(
     '%s: state → JSON → state identik',
     async (type) => {
       const meta = META[type];

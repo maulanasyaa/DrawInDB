@@ -9,7 +9,7 @@ import {
 } from '../src/config/diagramTypes.js';
 
 describe('getDiagramType', () => {
-  it.each(['erd', 'flowchart', 'usecase'])('mengembalikan entri eksak untuk "%s"', (id) => {
+  it.each(['erd', 'flowchart', 'usecase', 'statemachine'])('mengembalikan entri eksak untuk "%s"', (id) => {
     expect(getDiagramType(id)).toBe(DIAGRAM_TYPES[id]);
   });
 
@@ -23,9 +23,10 @@ describe('getDiagramType', () => {
 });
 
 describe('isGraphType', () => {
-  it('true untuk flowchart & usecase', () => {
+  it('true untuk flowchart, usecase & statemachine', () => {
     expect(isGraphType('flowchart')).toBe(true);
     expect(isGraphType('usecase')).toBe(true);
+    expect(isGraphType('statemachine')).toBe(true);
   });
 
   it('false untuk erd dan tipe tak dikenal (fallback ERD)', () => {
@@ -88,11 +89,11 @@ describe('registry invariants', () => {
     }
   });
 
-  it('export SQL hanya ERD, export JSON hanya Use Case, PNG untuk ERD + Flowchart', () => {
+  it('export SQL hanya ERD, export JSON hanya Use Case, PNG untuk ERD + Flowchart + State Machine', () => {
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.sql).map((t) => t.id)).toEqual(['erd']);
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.json).map((t) => t.id)).toEqual(['usecase']);
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.png).map((t) => t.id).sort()).toEqual(
-      ['erd', 'flowchart'],
+      ['erd', 'flowchart', 'statemachine'],
     );
   });
 
@@ -100,7 +101,34 @@ describe('registry invariants', () => {
     expect(getDiagramType('usecase').badge).toBe('USE CASE');
   });
 
-  it('DIAGRAM_TYPE_LIST urut erd → flowchart → usecase (urutan kartu di ProjectDetail)', () => {
-    expect(DIAGRAM_TYPE_LIST.map((t) => t.id)).toEqual(['erd', 'flowchart', 'usecase']);
+  it('DIAGRAM_TYPE_LIST urut erd → flowchart → usecase → statemachine (urutan kartu di ProjectDetail)', () => {
+    expect(DIAGRAM_TYPE_LIST.map((t) => t.id)).toEqual([
+      'erd',
+      'flowchart',
+      'usecase',
+      'statemachine',
+    ]);
+  });
+});
+
+describe('statemachine (tipe ke-4)', () => {
+  it('entri registry sesuai spek', () => {
+    const t = getDiagramType('statemachine');
+    expect(t).not.toBe(DIAGRAM_TYPES.erd);
+    expect(t).toMatchObject({
+      id: 'statemachine',
+      label: 'State Machine',
+      labelPlural: 'State Machines',
+      placeholder: 'Order Status',
+      badge: 'STATE MACHINE',
+      dataShape: 'graph',
+      hasDbType: false,
+      exports: { png: true, sql: false, json: false },
+    });
+  });
+
+  it('helper mengenali tipe graph, bukan ERD', () => {
+    expect(isGraphType('statemachine')).toBe(true);
+    expect(isErdType('statemachine')).toBe(false);
   });
 });
