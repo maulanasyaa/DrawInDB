@@ -29,7 +29,7 @@ export default function ProjectDetail() {
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-5xl mx-auto px-10 py-12 h-full flex flex-col relative z-10"
+        className="w-full max-w-6xl mx-auto px-10 py-12 h-full flex flex-col relative z-10"
       >
         <div className="flex flex-col mb-16">
           <div className="flex items-center justify-between">
@@ -55,8 +55,9 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* 4 tipe di registry: satu baris di layar lebar, 2x2 di menengah. */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* 5 tipe di registry: satu baris di layar lebar (xl), 3 kolom di
+            menengah, 2 di tablet. Kartu lebih rapat supaya 5 muat tanpa overflow. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
           {DIAGRAM_TYPE_LIST.map((diagramType) => {
             const diagramCount =
               project.diagrams?.filter((d) => d.type === diagramType.id).length || 0;
@@ -67,15 +68,15 @@ export default function ProjectDetail() {
               <div
                 key={diagramType.id}
                 onClick={() => handleCardClick(diagramType.id)}
-                className="group premium-card p-8 cursor-pointer hover-lift active:scale-[0.98] transition-all flex flex-col h-full"
+                className="group premium-card p-6 cursor-pointer hover-lift active:scale-[0.98] transition-all flex flex-col h-full"
               >
-                <div className="w-14 h-14 rounded-2xl bg-surface-2 border border-theme text-primary flex items-center justify-center text-2xl shadow-sm group-hover:border-focus transition-all mb-6">
+                <div className="w-12 h-12 rounded-2xl bg-surface-2 border border-theme text-primary flex items-center justify-center text-xl shadow-sm group-hover:border-focus transition-all mb-5">
                   <Icon />
                 </div>
-                <h3 className="text-xl font-display font-semibold text-primary mb-2">
+                <h3 className="text-lg font-display font-semibold text-primary mb-2">
                   {diagramType.label}
                 </h3>
-                <p className="text-sm text-secondary font-light mb-8 flex-1 leading-relaxed">
+                <p className="text-sm text-secondary font-light mb-6 flex-1 leading-relaxed">
                   {diagramType.description}
                 </p>
                 <div className="text-[10px] font-semibold text-muted uppercase tracking-widest pt-4 border-t border-theme/50">
