@@ -1,6 +1,5 @@
 import React, { useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { FiInfo } from "react-icons/fi";
 import ReactFlow, {
   ReactFlowProvider,
   Background,
@@ -13,29 +12,11 @@ import { AnimatePresence } from "framer-motion";
 import { useVaultStore } from "../store/vaultStore";
 import { useEditorStore } from "../store/editorStore";
 import { isGraphType } from "../config/diagramTypes";
+import { getEditorConfig } from "../config/editorTypes.jsx";
 
 import EditorHeader from "../components/editor/EditorHeader";
-import Sidebar from "../components/editor/Sidebar";
-import FlowchartSidebar from "../components/editor/FlowchartSidebar";
-import UseCaseSidebar from "../components/editor/UseCaseSidebar";
-import TableNode from "../components/editor/TableNode";
-import FlowchartNode from "../components/editor/FlowchartNode";
-import UseCaseNode from "../components/editor/UseCaseNode";
-import UseCaseEdge from "../components/editor/UseCaseEdge";
 import LoadingSpinner from "../components/LoadingSpinner";
-
-import UseCaseMarkers from "../components/editor/UseCaseMarkers";
 import { useEditorShortcuts } from "../hooks/useEditorShortcuts";
-
-const nodeTypes = {
-  table: TableNode,
-  flowchart: FlowchartNode,
-  usecase: UseCaseNode,
-};
-
-const edgeTypes = {
-  usecase: UseCaseEdge,
-};
 
 function EditorContent() {
   const reactFlowWrapper = useRef(null);
@@ -62,16 +43,14 @@ function EditorContent() {
   const onNodesChange = useEditorStore((state) => state.onNodesChange);
   const onEdgesChange = useEditorStore((state) => state.onEdgesChange);
   const onConnect = useEditorStore((state) => state.onConnect);
-  const addTable = useEditorStore((state) => state.addTable);
-  const addFlowNode = useEditorStore((state) => state.addFlowNode);
-  const addUseCaseNode = useEditorStore((state) => state.addUseCaseNode);
   const updateCanvas = useEditorStore((state) => state.updateCanvas);
 
   const setSelectedTable = useEditorStore((state) => state.setSelectedTable);
 
   const diagramType = diagramMeta?.type;
-  const isFlowchart = diagramType === "flowchart";
-  const isUseCase = diagramType === "usecase";
+  const editorConfig = getEditorConfig(diagramType);
+  const EditorSidebar = editorConfig.sidebar;
+  const EditorOverlay = editorConfig.overlays;
   const isNodeBased = isGraphType(diagramType);
 
   const cleanup = useEditorStore((state) => state.cleanup);
@@ -91,6 +70,8 @@ function EditorContent() {
     };
   }, [cleanup]);
 
+  const addNode = editorConfig.addNode;
+
   const onDragOver = useCallback((event) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
@@ -108,17 +89,9 @@ function EditorContent() {
         y: event.clientY - reactFlowBounds.top,
       });
 
-      if (isUseCase) {
-        addUseCaseNode(type, position);
-      } else if (isFlowchart) {
-        addFlowNode(type, position);
-      } else {
-        if (type === "table") {
-          addTable(position);
-        }
-      }
+      addNode(type, position);
     },
-    [project, addTable, addFlowNode, addUseCaseNode, isFlowchart, isUseCase],
+    [project, addNode],
   );
 
   const onNodeClick = useCallback(
@@ -146,10 +119,9 @@ function EditorContent() {
 
   const renderSidebar = () => {
     if (!isSidebarOpen) return null;
-    if (isUseCase) return <UseCaseSidebar key="usecase-sidebar" />;
-    if (isFlowchart) return <FlowchartSidebar key="flowchart-sidebar" />;
-    return <Sidebar key="erd-sidebar" />;
+    return <EditorSidebar />;
   };
+
 
   return (
     <div className="flex flex-col h-screen w-full bg-canvas text-primary overflow-hidden relative">
@@ -158,33 +130,9 @@ function EditorContent() {
       <div className="flex-1 relative flex" ref={reactFlowWrapper}>
         <AnimatePresence>{renderSidebar()}</AnimatePresence>
 
-        {isUseCase && <UseCaseMarkers />}
+        {EditorOverlay && <EditorOverlay />}
 
-        {isFlowchart && (
-          <div className="absolute bottom-6 left-150 -translate-x-1/2 z-40 bg-surface border border-theme px-5 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs text-secondary animate-fade-in pointer-events-none">
-            <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-accent">
-              <FiInfo className="text-sm" />
-            </div>
-            <span>
-              <strong className="text-primary font-medium">Tips:</strong> Drag
-              the line from the <strong>Right/Bottom</strong> (Source) to the{" "}
-              <strong>Left/Top</strong> (Target).
-            </span>
-          </div>
-        )}
-
-        {isUseCase && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-theme px-5 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs text-secondary animate-fade-in pointer-events-none max-w-[560px]">
-            <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-accent">
-              <FiInfo className="text-sm" />
-            </div>
-            <span>
-              <strong className="text-primary font-medium">Tips:</strong> Pick a
-              relationship type in the sidebar, then drag from a node handle to
-              another node.
-            </span>
-          </div>
-        )}
+        {editorConfig.tips}
 
         {/* deleteKeyCode default React Flow hanya "Backspace"; tambah Delete
             (keyboard Mac tanpa Backspace). Ini BUKAN penyebab seleksi node
@@ -198,9 +146,7 @@ function EditorContent() {
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           deleteKeyCode={["Backspace", "Delete"]}
-          defaultEdgeOptions={
-            isUseCase ? { type: "usecase" } : { type: "smoothstep" }
-          }
+          defaultEdgeOptions={editorConfig.defaultEdge}
           onInit={(instance) => {
             instance.setViewport({
               x: canvasState.x || 0,
@@ -213,8 +159,8 @@ function EditorContent() {
           }}
           onDragOver={onDragOver}
           onDrop={onDrop}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
+          nodeTypes={editorConfig.nodeTypes}
+          edgeTypes={editorConfig.edgeTypes}
           minZoom={0.1}
           maxZoom={2}
           snapToGrid

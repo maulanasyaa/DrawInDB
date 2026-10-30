@@ -15,7 +15,7 @@ import {
   parseUseCaseImport,
 } from "../../utils/useCaseJson";
 import { exportDiagramAsImage } from "../../utils/exportImage";
-import { getDiagramType } from "../../config/diagramTypes";
+import { getDiagramType, isErdType } from "../../config/diagramTypes";
 
 export default function EditorHeader() {
   const navigate = useNavigate();
@@ -42,10 +42,8 @@ export default function EditorHeader() {
   if (!diagramMeta) return null;
 
   const type = diagramMeta.type;
-  const isERD = type === "erd";
-  const isUseCase = type === "usecase";
-  const isFlowchart = type === "flowchart";
   const typeConfig = getDiagramType(type);
+  const isERD = isErdType(type);
   const badgeText = typeConfig.badge;
   const backLabel = typeConfig.backLabel;
 
@@ -95,8 +93,8 @@ export default function EditorHeader() {
 
   const handleExportImage = async () => {
     try {
-      // Untuk ERD, node-nya di `tables`. Untuk flowchart & usecase, di `nodes`.
-      const exportNodes = type === "erd" ? tables : nodes;
+      // ERD menyimpan node di `tables`; tipe graph menyimpannya di `nodes`.
+      const exportNodes = isERD ? tables : nodes;
 
       if (!exportNodes || exportNodes.length === 0) {
         alert("Nothing to export — the diagram is empty.");
