@@ -23,7 +23,9 @@ function setupMenu(mainWindow) {
       submenu: [
         { label: 'New Diagram', click: () => { /* Handle in React via IPC later */ } },
         { label: 'Open Vault', click: () => { /* Handle in React via IPC later */ } },
-        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => { /* Handle in React via IPC later */ } },
+        // Tanpa accelerator: CmdOrCtrl+S di menu menelan keydown sebelum renderer
+        // sempat menanganinya (shortcut simpan hidup di renderer).
+        { label: 'Save', click: () => { /* Handle in React via IPC later */ } },
         { label: 'Export PNG', click: () => { /* Handle in React via IPC later */ } },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' }
