@@ -25,6 +25,7 @@ import UseCaseEdge from "../components/editor/UseCaseEdge";
 import LoadingSpinner from "../components/LoadingSpinner";
 
 import UseCaseMarkers from "../components/editor/UseCaseMarkers";
+import { useEditorShortcuts } from "../hooks/useEditorShortcuts";
 
 const nodeTypes = {
   table: TableNode,
@@ -41,6 +42,8 @@ function EditorContent() {
   const { projectId, filename } = useParams();
   const navigate = useNavigate();
   const { project } = useReactFlow();
+
+  useEditorShortcuts();
 
   const vaultPath = useVaultStore((state) => state.currentVault?.path);
 

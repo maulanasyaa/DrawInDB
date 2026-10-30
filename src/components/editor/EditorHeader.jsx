@@ -7,6 +7,8 @@ import {
   FiDownload,
   FiUpload,
   FiImage,
+  FiCornerUpLeft,
+  FiCornerUpRight,
 } from "react-icons/fi";
 import {
   buildUseCaseExport,
@@ -30,6 +32,12 @@ export default function EditorHeader() {
   const replaceUseCaseGraph = useEditorStore(
     (state) => state.replaceUseCaseGraph,
   );
+  const undo = useEditorStore((state) => state.undo);
+  const redo = useEditorStore((state) => state.redo);
+  const historyPast = useEditorStore((state) => state.historyPast);
+  const historyFuture = useEditorStore((state) => state.historyFuture);
+  const canUndo = historyPast.length > 0;
+  const canRedo = historyFuture.length > 0;
 
   if (!diagramMeta) return null;
 
@@ -157,6 +165,35 @@ export default function EditorHeader() {
       </div>
 
       <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            className={`p-1.5 rounded-md transition-colors ${
+              canUndo
+                ? "text-muted hover:text-primary hover:bg-surface-2"
+                : "text-muted opacity-40 cursor-not-allowed"
+            }`}
+            title="Undo (Ctrl/Cmd+Z)"
+            aria-label="Undo"
+          >
+            <FiCornerUpLeft className="text-sm" />
+          </button>
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            className={`p-1.5 rounded-md transition-colors ${
+              canRedo
+                ? "text-muted hover:text-primary hover:bg-surface-2"
+                : "text-muted opacity-40 cursor-not-allowed"
+            }`}
+            title="Redo (Ctrl/Cmd+Shift+Z, Ctrl+Y)"
+            aria-label="Redo"
+          >
+            <FiCornerUpRight className="text-sm" />
+          </button>
+        </div>
+
         {isDirty && (
           <span className="text-[10px] font-medium text-warning animate-pulse select-none">
             Unsaved changes
