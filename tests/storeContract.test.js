@@ -44,11 +44,7 @@ describe('kontrak store ↔ komponen', () => {
     return names;
   }
 
-  // Masih gagal: src/hooks/useEditorShortcuts.js memakai `state.forceSave`
-  // yang tidak ada di store (mod+S mati). File itu di luar cakupan refactor
-  // ini dan tidak di-import siapa pun; ganti ke `it` setelah hook dirapikan
-  // atau dihapus.
-  it.fails('semua `state.<nama>` yang dipakai komponen ada di editorStore', () => {
+  it('semua `state.<nama>` yang dipakai komponen ada di editorStore', () => {
     const missing = [];
 
     for (const file of FILES) {
