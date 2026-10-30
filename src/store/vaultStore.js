@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { createPrdDoc, sanitizeDocFilename, docDisplayName } from '../utils/prd.js';
+import { getDiagramType } from '../config/diagramTypes';
+import { emptySequence } from '../utils/sequence';
 
 // Electron membungkus error main process: "Error invoking remote method 'x': Error: msg"
 const ipcMessage = (e) =>
@@ -440,6 +442,14 @@ export const useVaultStore = create((set, get) => ({
         relationships: [],
         nodes: []
       };
+
+      // Template awal tipe sequence: model berurutan, bukan node/edge.
+      if (getDiagramType(type).dataShape === 'sequence') {
+        const seq = emptySequence();
+        newDiagram.participants = seq.participants;
+        newDiagram.messages = seq.messages;
+        newDiagram.options = seq.options;
+      }
 
       await window.api.writeFile(filePath, JSON.stringify(newDiagram, null, 2));
 

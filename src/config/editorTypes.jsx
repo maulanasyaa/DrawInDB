@@ -9,6 +9,8 @@
 //   addNode(type, position, ctx): aksi store untuk drop/klik palet
 //   tips      : disclaimer/hint di bawah kanvas (JSX atau null)
 //   overlays  : komponen side-effect (mis. inject SVG markers) atau null
+//   canvas    : (opsional) kanvas non-React-Flow; absen = <ReactFlow>
+//   exportPng : (opsional) fungsi export PNG sendiri; absen = exportImage.js
 
 import React from 'react';
 import { FiInfo } from 'react-icons/fi';
@@ -18,6 +20,9 @@ import FlowchartSidebar from '../components/editor/FlowchartSidebar';
 import UseCaseSidebar from '../components/editor/UseCaseSidebar';
 import StateMachineSidebar from '../components/editor/StateMachineSidebar';
 import ArchitectureSidebar from '../components/editor/ArchitectureSidebar';
+import SequenceSidebar from '../components/editor/SequenceSidebar';
+import SequenceCanvas from '../components/editor/SequenceCanvas';
+import { exportSequencePng } from '../utils/sequenceExport';
 
 import TableNode from '../components/editor/TableNode';
 import FlowchartNode from '../components/editor/FlowchartNode';
@@ -127,6 +132,19 @@ export const EDITOR_TYPES = {
     // Panah Architecture dideklarasikan di dalam komponen edge sendiri
     // (satu dokumen SVG dengan path pemakainya) — tidak butuh overlay.
     overlays: null,
+  },
+  // Satu-satunya tipe non-React-Flow: `canvas` menggantikan <ReactFlow>.
+  // Tidak ada koneksi di kanvas (pesan ditambah lewat sidebar).
+  sequence: {
+    sidebar: SequenceSidebar,
+    canvas: SequenceCanvas,
+    nodeTypes: {},
+    edgeTypes: {},
+    defaultEdge: null,
+    addNode: () => {},
+    tips: null,
+    overlays: null,
+    exportPng: exportSequencePng,
   },
 };
 

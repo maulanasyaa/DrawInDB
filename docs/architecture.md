@@ -33,8 +33,31 @@ Deskripsi kode saat ini (per 2026-10-30), bukan target.
 | `usecase` | — | `nodes[]` + `edges[]` (edge punya `data.relType`) |
 | `statemachine` | — | `nodes[]` + `edges[]` (node `data.type` = initial/state/final/choice; edge punya `data.label`) |
 | `architecture` | — | `nodes[]` + `edges[]` (node `data.type` = person/system/container/database/boundary; edge punya `data.label` + `data.technology`) |
+| `sequence` | — | `participants[]` + `messages[]` + `options` (BUKAN nodes/edges; lihat §1b) |
 
 Semua field ditulis `saveDiagram()`; tipe yang tidak memakai `tables` menulis array kosong. `canvas` legacy berformat `{pan:{x,y},zoom}` dinormalisasi saat load.
+
+### 1b. Diagram Sequence — satu-satunya tipe non-React-Flow
+`dataShape: 'sequence'`. Model berurutan, bukan posisi bebas: urutan array = urutan tampil, layout dihitung ulang setiap render (`utils/sequence.js`). File:
+
+```json
+{
+  "version": "1.0",
+  "meta": { "name", "type": "sequence", "projectId", "created_at", "updated_at" },
+  "canvas": { "x", "y", "zoom" },
+  "tables": [], "relationships": [], "nodes": [], "edges": [],
+  "participants": [ { "id", "name", "kind" } ],
+  "messages": [ { "id", "from", "to", "label", "kind" } ],
+  "options": { "showNumbers": false }
+}
+```
+
+- `participants[].kind`: `participant | actor | database | external`. `messages[].kind`: `sync | async | return | self`.
+- Tiga field tambahan hanya ditulis bila `getDiagramType(type).dataShape === 'sequence'`; file lima tipe lama tetap 7 kunci (`tests/roundtrip.test.js`).
+- `loadDiagram` menormalkan lewat `normalizeSequence()` untuk **semua** tipe (default `[]`/`[]`/`{showNumbers:false}`), jadi file rusak/field hilang tidak crash dan state lama tidak terbawa. Pesan yang merujuk peserta hilang **dipertahankan** (nomor urut stabil), dirender dilewati, diberi peringatan.
+- Layout murni (`layoutSequence`, tanpa DOM): pitch kolom dari lebar nama terpanjang, tinggi baris tetap, self-message = loop di kanan garis hidup, pesan kanan→kiri benar.
+- Store: `participants`, `messages`, `sequenceOptions`, `selectedSequenceItem`; `participants`/`messages` ikut snapshot history, opsi + seleksi tidak. Hapus peserta menghapus pesannya dalam **satu** snapshot.
+- Renderer `SequenceCanvas.jsx` (SVG sendiri, zoom lokal — tidak lewat `updateCanvas`, yang akan menyalakan "Unsaved changes" saat scroll). Export PNG lewat `editorConfig.exportPng` (`utils/sequenceExport.js`, clone SVG + buang `.seq-ui`).
 
 ### 1a. Dokumen PRD (`docs/`) — BUKAN tipe diagram
 Dokumen teks terstruktur per project. Tidak masuk `diagramTypes.js`/`editorTypes.jsx`, tidak memakai React Flow, dan tidak muncul di grid kartu tipe.
@@ -61,22 +84,22 @@ Dokumen teks terstruktur per project. Tidak masuk `diagramTypes.js`/`editorTypes
 
 ## 2. Registry tipe: `src/config/diagramTypes.js`
 Entri `DIAGRAM_TYPES[<id>]`:
-`id`, `label`, `labelPlural`, `placeholder`, `badge`, `backLabel`, `description`, `icon`, `dataShape` (`tables` | `graph`), `hasDbType`, `exports` `{ png, sql, json }`.
+`id`, `label`, `labelPlural`, `placeholder`, `badge`, `backLabel`, `description`, `icon`, `dataShape` (`tables` | `graph` | `sequence`), `hasDbType`, `exports` `{ png, sql, json }`.
 
-Saat ini: `erd` (tables, hasDbType, png+sql), `flowchart` (graph, png), `usecase` (graph, json), `statemachine` (graph, png), `architecture` (graph, png).
+Saat ini: `erd` (tables, hasDbType, png+sql), `flowchart` (graph, png), `usecase` (graph, json), `statemachine` (graph, png), `architecture` (graph, png), `sequence` (sequence, png).
 
-Helper: `getDiagramType(id)` (fallback ke `DEFAULT_DIAGRAM_TYPE = 'erd'` bila id tak dikenal/undefined), `isGraphType(id)`, `isErdType(id)`, `DIAGRAM_TYPE_LIST` (urutan render kartu).
+Helper: `getDiagramType(id)` (fallback ke `DEFAULT_DIAGRAM_TYPE = 'erd'` bila id tak dikenal/undefined), `isGraphType(id)`, `isErdType(id)`, `isSequenceType(id)`, `DIAGRAM_TYPE_LIST` (urutan render kartu).
 
-Pemakai: `EditorHeader` + `DiagramCard` + `DiagramList` (`getDiagramType` → `hasDbType`, `exports`), `ProjectDetail` (`DIAGRAM_TYPE_LIST`, grid 5 kartu: `xl:grid-cols-5`), `Home` (`getDiagramType().badge`, urutan badge dari `DIAGRAM_TYPE_LIST`; badge `flex-wrap` jadi 5 tipe tidak meluber).
+Pemakai: `EditorHeader` + `DiagramCard` + `DiagramList` (`getDiagramType` → `hasDbType`, `exports`), `ProjectDetail` (`DIAGRAM_TYPE_LIST`, grid 6 kartu: `xl:grid-cols-3` → dua baris tiga), `Home` (`getDiagramType().badge`, urutan badge dari `DIAGRAM_TYPE_LIST`; badge `flex-wrap` jadi 6 tipe tidak meluber).
 
 ### 2a. Config editor per tipe: `src/config/editorTypes.jsx`
 Pemisahan supaya `diagramTypes.js` tetap bebas JSX. `EDITOR_TYPES[<id>]`:
-`sidebar`, `nodeTypes`, `edgeTypes`, `defaultEdge`, `addNode(type, position)`, `tips`, `overlays`.
-Helper: `getEditorConfig(id)` (fallback entri `erd`). `Editor.jsx` hanya membaca config ini — tidak ada `nodeTypes`/`renderSidebar`/`onDrop` per tipe di sana.
+`sidebar`, `nodeTypes`, `edgeTypes`, `defaultEdge`, `addNode(type, position)`, `tips`, `overlays`, plus dua kunci **opsional**: `canvas` (komponen kanvas pengganti `<ReactFlow>`) dan `exportPng` (fungsi export PNG sendiri).
+Helper: `getEditorConfig(id)` (fallback entri `erd`). `Editor.jsx` hanya membaca config ini — tidak ada `nodeTypes`/`renderSidebar`/`onDrop` per tipe di sana; kanvas dipilih lewat `editorConfig.canvas ?? ReactFlowCanvas` (bukan cek nama tipe). `ReactFlowCanvas.jsx` adalah blok `<ReactFlow>` lama yang dipindah apa adanya (menerima `{ editorConfig }`, membaca store sendiri, wajib berada di dalam `ReactFlowProvider`). `SequenceCanvas`/`SequenceSidebar` tidak boleh memanggil `useReactFlow()`.
 `tests/editorStore.statemachine.test.jsx` menjaga korespondensi: setiap id di `DIAGRAM_TYPES` punya entri `EDITOR_TYPES` dan strategi `CONNECT_STRATEGIES` (dan sebaliknya).
 
 ### 2b. Strategi koneksi per tipe: `src/config/connectStrategies.js`
-`CONNECT_STRATEGIES[<id>](connection, { get })` mengembalikan patch state (`{ flowEdges?, tables?, relationships? }`) atau `null` (ditolak). Store hanya me-lookup lewat `getDiagramType(type).id` lalu men-set patch + satu snapshot history. `erd` memakai FK/`clearOrphanFk`, `flowchart` label Yes/No, `usecase` `data.relType`, `statemachine` edge `type:'statemachine'` tanpa dedupe (mengizinkan beberapa transition & self-transition), `architecture` edge `data:{label,technology}` tanpa dedupe tapi **menolak self-loop** (return `null`).
+`CONNECT_STRATEGIES[<id>](connection, { get })` mengembalikan patch state (`{ flowEdges?, tables?, relationships? }`) atau `null` (ditolak). Store hanya me-lookup lewat `getDiagramType(type).id` lalu men-set patch + satu snapshot history. `erd` memakai FK/`clearOrphanFk`, `flowchart` label Yes/No, `usecase` `data.relType`, `statemachine` edge `type:'statemachine'` tanpa dedupe (mengizinkan beberapa transition & self-transition), `architecture` edge `data:{label,technology}` tanpa dedupe tapi **menolak self-loop** (return `null`), `sequence` selalu `null` (pesan ditambahkan lewat sidebar, bukan koneksi kanvas).
 
 ## 3. Alur editor
 1. `Editor.jsx` ambil `vaultPath` dari `vaultStore`, panggil `editorStore.loadDiagram(vaultPath, projectId, filename)`.
@@ -110,6 +133,8 @@ Selain itu, pemilihan label/badge/ikon/field DB/export/tombol, layout editor, si
 
 ## 5. Checklist menambah tipe diagram baru (`<id>`)
 
+### 5a. Tipe React Flow (`dataShape` `tables`/`graph`)
+
 1. `src/config/diagramTypes.js` — tambah entri `DIAGRAM_TYPES[<id>]` (lengkapi `dataShape`, `hasDbType`, `exports`, `icon`); tambahkan test di `tests/diagramTypes.test.js` (termasuk urutan `DIAGRAM_TYPE_LIST`).
 2. `src/config/<id>Types.js` — konstanta node/edge tipe (pola `useCaseTypes.js` / `stateMachineTypes.js` / `architectureTypes.js`). Bebas JSX; simpan ukuran default, label default, field tambahan per subtype, dan daftar palet di sini.
 3. `src/components/editor/<Id>Node.jsx` (+ `<Id>Edge.jsx`, `<Id>Sidebar.jsx`, `<Id>Markers.jsx` bila perlu) — drag source pakai `dataTransfer` key `application/reactflow`.
@@ -121,8 +146,21 @@ Selain itu, pemilihan label/badge/ikon/field DB/export/tombol, layout editor, si
 
 **Tipe berperingatan** (`src/utils/<id>Validation.js`): semua pesan berprefix satu string tipe (pola `Architecture: `) supaya `utils/exportImage.js` hanya perlu menambah satu baris `title.startsWith("<Type>:")`.
 
-**Halaman non-editor** (`ProjectDetail` grid kartu, `Home` badge) membaca registry, jadi tidak perlu disentuh per tipe — cukup cek layout saat jumlah tipe bertambah (grid ProjectDetail memakai `xl:grid-cols-5`).
+### 5b. Tipe non-React-Flow (`dataShape` `sequence`)
+
+Sama seperti 5a untuk langkah 1, 5, 6, dan 8, dengan perbedaan:
+
+- `src/utils/sequence.js` menggantikan `src/config/<id>Types.js` sebagai tempat layout murni (harus bebas DOM — test jalan di environment `node`).
+- Tidak ada node/edge component. Sebagai gantinya satu `canvas` SVG di `EDITOR_TYPES[<id>].canvas` + `SequenceSidebar` untuk pengeditan model berurutan.
+- `CONNECT_STRATEGIES[<id>]` tetap wajib ada (invariant test) — isi `() => null`.
+- `src/store/editorStore.js` — field state baru **harus mendarat sebelum** komponen yang memakainya (`tests/storeContract.test.js` memindai `state.<nama>` di `src/` saat modul dimuat), dan harus ikut `captureSnapshot`/`_restoreSnapshot`/`cleanup`.
+- `saveDiagram`/`createDiagram` menulis field tipe **setelah** literal objek (`if (isSeq) fileData.x = …`), bukan spread bernilai `undefined`, supaya file tipe lain tetap 7 kunci.
+- Export PNG lewat `EDITOR_TYPES[<id>].exportPng`; `EditorHeader` memanggilnya **sebelum** guard "Nothing to export" (tipe ini tidak punya `nodes`).
+
+**Halaman non-editor** (`ProjectDetail` grid kartu, `Home` badge) membaca registry, jadi tidak perlu disentuh per tipe — cukup cek layout saat jumlah tipe bertambah (grid ProjectDetail memakai `xl:grid-cols-3` untuk 6 kartu).
 
 ### Catatan: langkah kini lebih singkat dari saat State Machine
 State Machine adalah tipe pertama yang memakai `EDITOR_TYPES`/`CONNECT_STRATEGIES`; pembuatan kedua file itu ikut tercatat di commit yang sama, jadi waktu itu juga menyentuh `pages/Editor.jsx` dan `EditorHeader` (`6b15593`, −76 baris di `Editor.jsx`). Setelah pemisahan itu selesai, Architecture hanya menambah entri ke dua file config tersebut — **`Editor.jsx` dan `EditorHeader.jsx` tidak diubah sama sekali**, begitu pula `onNodesChange`/`onEdgesChange`/`onConnect` di store (semua lewat `isGraphType` + lookup registry). Yang tetap harus ditulis per tipe: file konstanta, komponen node/edge/sidebar/markers, action store, strategi koneksi, validasi, dan test.
+
+Sequence mengubah itu: tipe non-React-Flow memaksa `Editor.jsx` berubah **sekali** (blok `<ReactFlow>` dipindah ke `ReactFlowCanvas.jsx`, kanvas dipilih lewat `editorConfig.canvas`) dan `EditorHeader` berubah **sekali** (jalur `editorConfig.exportPng`). Keduanya config-driven, jadi tipe non-graph berikutnya cukup mengisi `canvas`/`exportPng` tanpa menyentuh dua file itu lagi.
 

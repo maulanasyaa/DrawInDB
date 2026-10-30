@@ -62,6 +62,13 @@ async function buildAndSave(meta) {
       label: 'Mengirim order',
       technology: 'HTTPS/JSON',
     });
+  } else if (meta.type === 'sequence') {
+    s().addSequenceParticipant('actor');
+    s().addSequenceParticipant('database');
+    const [a, b] = s().participants.map((p) => p.id);
+    s().addSequenceMessage({ from: a, to: b, label: 'login' });
+    s().addSequenceMessage({ from: b, to: a, label: 'ok', kind: 'return' });
+    s().addSequenceMessage({ from: a, to: a, label: 'cache', kind: 'self' });
   } else {
     s().addUseCaseNode('actor', { x: 0, y: 0 });
     s().addUseCaseNode('useCase', { x: 200, y: 0 });
@@ -79,6 +86,8 @@ const snapshot = () => ({
   relationships: s().relationships,
   nodes: s().nodes,
   flowEdges: s().flowEdges,
+  participants: s().participants,
+  messages: s().messages,
   canvasState: s().canvasState,
   isDirty: s().isDirty,
 });
@@ -89,6 +98,7 @@ const META = {
   usecase: { type: 'usecase', name: 'UC' },
   statemachine: { type: 'statemachine', name: 'Order Status' },
   architecture: { type: 'architecture', name: 'Online Store System' },
+  sequence: { type: 'sequence', name: 'Login Flow' },
 };
 
 let files;
@@ -101,7 +111,7 @@ afterEach(() => {
 });
 
 describe('round-trip save → load', () => {
-  it.each(['erd', 'flowchart', 'usecase', 'statemachine', 'architecture'])(
+  it.each(['erd', 'flowchart', 'usecase', 'statemachine', 'architecture', 'sequence'])(
     '%s: state → JSON → state identik',
     async (type) => {
       const meta = META[type];
@@ -133,6 +143,20 @@ describe('round-trip save → load', () => {
     expect(raw.meta.db_type).toBe('postgresql');
     expect(raw.edges).toEqual([]);
     expect(raw.meta.updated_at).toBeTruthy();
+  });
+
+  it('field sequence hanya ditulis untuk tipe sequence', async () => {
+    await buildAndSave(META.sequence);
+    const seqRaw = JSON.parse([...files.values()][0]);
+    expect(Object.keys(seqRaw).sort()).toEqual(
+      [
+        'canvas', 'edges', 'messages', 'meta', 'nodes',
+        'options', 'participants', 'relationships', 'tables', 'version',
+      ].sort(),
+    );
+    expect(seqRaw.participants).toHaveLength(2);
+    expect(seqRaw.messages).toHaveLength(3);
+    expect(seqRaw.options).toEqual({ showNumbers: false });
   });
 
   it('loadDiagram memaksa type "table" pada tabel ERD (normalisasi format lama)', async () => {

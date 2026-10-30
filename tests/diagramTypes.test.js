@@ -6,10 +6,11 @@ import {
   getDiagramType,
   isGraphType,
   isErdType,
+  isSequenceType,
 } from '../src/config/diagramTypes.js';
 
 describe('getDiagramType', () => {
-  it.each(['erd', 'flowchart', 'usecase', 'statemachine', 'architecture'])('mengembalikan entri eksak untuk "%s"', (id) => {
+  it.each(['erd', 'flowchart', 'usecase', 'statemachine', 'architecture', 'sequence'])('mengembalikan entri eksak untuk "%s"', (id) => {
     expect(getDiagramType(id)).toBe(DIAGRAM_TYPES[id]);
   });
 
@@ -30,10 +31,21 @@ describe('isGraphType', () => {
     expect(isGraphType('architecture')).toBe(true);
   });
 
-  it('false untuk erd dan tipe tak dikenal (fallback ERD)', () => {
+  it('false untuk erd, sequence, dan tipe tak dikenal (fallback ERD)', () => {
     expect(isGraphType('erd')).toBe(false);
+    expect(isGraphType('sequence')).toBe(false);
     expect(isGraphType(undefined)).toBe(false);
     expect(isGraphType('unknown')).toBe(false);
+  });
+});
+
+describe('isSequenceType', () => {
+  it('hanya true untuk sequence', () => {
+    expect(isSequenceType('sequence')).toBe(true);
+    for (const id of ['erd', 'flowchart', 'usecase', 'statemachine', 'architecture']) {
+      expect(isSequenceType(id)).toBe(false);
+    }
+    expect(isSequenceType(undefined)).toBe(false);
   });
 });
 
@@ -44,9 +56,10 @@ describe('isErdType', () => {
     expect(isErdType('nope')).toBe(true);
   });
 
-  it('false untuk graph types', () => {
+  it('false untuk graph types dan sequence', () => {
     expect(isErdType('flowchart')).toBe(false);
     expect(isErdType('usecase')).toBe(false);
+    expect(isErdType('sequence')).toBe(false);
   });
 });
 
@@ -57,10 +70,19 @@ describe('registry invariants', () => {
   });
 
   it('dataShape konsisten dengan helper', () => {
+    const SHAPES = {
+      erd: 'tables',
+      flowchart: 'graph',
+      usecase: 'graph',
+      statemachine: 'graph',
+      architecture: 'graph',
+      sequence: 'sequence',
+    };
     for (const t of DIAGRAM_TYPE_LIST) {
-      expect(t.dataShape).toBe(t.id === 'erd' ? 'tables' : 'graph');
+      expect(t.dataShape, t.id).toBe(SHAPES[t.id]);
       expect(isErdType(t.id)).toBe(t.dataShape === 'tables');
       expect(isGraphType(t.id)).toBe(t.dataShape === 'graph');
+      expect(isSequenceType(t.id)).toBe(t.dataShape === 'sequence');
     }
   });
 
@@ -90,11 +112,11 @@ describe('registry invariants', () => {
     }
   });
 
-  it('export SQL hanya ERD, export JSON hanya Use Case, PNG untuk ERD + Flowchart + State Machine + Architecture', () => {
+  it('export SQL hanya ERD, export JSON hanya Use Case, PNG untuk semua kecuali Use Case', () => {
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.sql).map((t) => t.id)).toEqual(['erd']);
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.json).map((t) => t.id)).toEqual(['usecase']);
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.png).map((t) => t.id).sort()).toEqual(
-      ['architecture', 'erd', 'flowchart', 'statemachine'],
+      ['architecture', 'erd', 'flowchart', 'sequence', 'statemachine'],
     );
   });
 
@@ -102,13 +124,14 @@ describe('registry invariants', () => {
     expect(getDiagramType('usecase').badge).toBe('USE CASE');
   });
 
-  it('DIAGRAM_TYPE_LIST urut erd → flowchart → usecase → statemachine → architecture (urutan kartu di ProjectDetail)', () => {
+  it('DIAGRAM_TYPE_LIST urut erd → … → architecture → sequence (urutan kartu di ProjectDetail)', () => {
     expect(DIAGRAM_TYPE_LIST.map((t) => t.id)).toEqual([
       'erd',
       'flowchart',
       'usecase',
       'statemachine',
       'architecture',
+      'sequence',
     ]);
   });
 });

@@ -16,6 +16,7 @@ import {
 } from "../../utils/useCaseJson";
 import { exportDiagramAsImage } from "../../utils/exportImage";
 import { getDiagramType, isErdType } from "../../config/diagramTypes";
+import { getEditorConfig } from "../../config/editorTypes.jsx";
 
 export default function EditorHeader() {
   const navigate = useNavigate();
@@ -43,6 +44,7 @@ export default function EditorHeader() {
 
   const type = diagramMeta.type;
   const typeConfig = getDiagramType(type);
+  const editorConfig = getEditorConfig(type);
   const isERD = isErdType(type);
   const badgeText = typeConfig.badge;
   const backLabel = typeConfig.backLabel;
@@ -93,6 +95,13 @@ export default function EditorHeader() {
 
   const handleExportImage = async () => {
     try {
+      // Tipe dengan kanvas sendiri (sequence) mengekspor SVG-nya langsung.
+      // Dicek SEBELUM guard kosong: sequence tidak punya `nodes` sama sekali.
+      if (editorConfig.exportPng) {
+        await editorConfig.exportPng({ filename: diagramMeta.name || "diagram" });
+        return;
+      }
+
       // ERD menyimpan node di `tables`; tipe graph menyimpannya di `nodes`.
       const exportNodes = isERD ? tables : nodes;
 

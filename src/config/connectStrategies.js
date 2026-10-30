@@ -120,4 +120,10 @@ const architecture = (connection, { get }) => {
   return { flowEdges: [...get().flowEdges, newEdge] };
 };
 
-export const CONNECT_STRATEGIES = { erd, flowchart, usecase, statemachine, architecture };
+/**
+ * Sequence: tidak ada koneksi di kanvas. Pesan ditambahkan lewat sidebar, jadi
+ * tidak ada patch — `onConnect` sudah no-op saat strategi mengembalikan null.
+ */
+const sequence = () => null;
+
+export const CONNECT_STRATEGIES = { erd, flowchart, usecase, statemachine, architecture, sequence };

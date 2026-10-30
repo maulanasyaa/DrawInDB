@@ -5,7 +5,7 @@ import { toPng } from "html-to-image";
  * Resolve semua CSS custom properties di SVG menjadi nilai eksplisit.
  * html-to-image tidak bisa resolve var() di dalam SVG attributes.
  */
-function resolveSvgCssVars(rootEl) {
+export function resolveSvgCssVars(rootEl) {
   const rootStyle = getComputedStyle(document.documentElement);
 
   const cssVarMap = {

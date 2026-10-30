@@ -44,13 +44,14 @@ describe('registry Architecture (tipe ke-5)', () => {
     expect(isErdType('architecture')).toBe(false);
   });
 
-  it('terdaftar terakhir di DIAGRAM_TYPE_LIST (fallback getDiagramType tetap ERD)', () => {
+  it('terdaftar sebelum sequence di DIAGRAM_TYPE_LIST (fallback getDiagramType tetap ERD)', () => {
     expect(DIAGRAM_TYPE_LIST.map((t) => t.id)).toEqual([
       'erd',
       'flowchart',
       'usecase',
       'statemachine',
       'architecture',
+      'sequence',
     ]);
     expect(getDiagramType('nope').id).toBe('erd');
   });

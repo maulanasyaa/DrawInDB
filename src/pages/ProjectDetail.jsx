@@ -166,9 +166,9 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* 5 tipe di registry: satu baris di layar lebar (xl), 3 kolom di
-            menengah, 2 di tablet. Kartu lebih rapat supaya 5 muat tanpa overflow. */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+        {/* 6 tipe di registry: 3 kolom di layar lebar (xl) → dua baris rapi,
+            2 di tablet. Kartu lebih rapat supaya muat tanpa overflow. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-5">
           {DIAGRAM_TYPE_LIST.map((diagramType) => {
             const diagramCount =
               project.diagrams?.filter((d) => d.type === diagramType.id).length || 0;
@@ -198,8 +198,8 @@ export default function ProjectDetail() {
           })}
         </div>
 
-        {/* Dokumen PRD. Bagian terpisah dari grid kartu diagram (yang tetap
-            hanya berisi 5 tipe dari registry). */}
+        {/* Dokumen PRD. Bagian terpisah dari grid kartu diagram (yang berisi
+            tipe dari registry). */}
         <div className="mt-14 flex flex-col gap-6">
           <div className="flex items-center justify-between gap-4">
             <div>

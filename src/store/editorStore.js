@@ -17,6 +17,14 @@ import {
   ARCH_DEFAULT_LABELS,
   ARCH_DEFAULT_FIELDS,
 } from '../config/architectureTypes';
+import {
+  SQ_DEFAULT_PARTICIPANT_KIND,
+  SQ_DEFAULT_MESSAGE_KIND,
+  SQ_DEFAULT_PARTICIPANT_NAME,
+  SQ_DEFAULT_MESSAGE_LABEL,
+  SQ_MESSAGE_KINDS,
+} from '../config/sequenceTypes';
+import { normalizeSequence } from '../utils/sequence';
 import { getDiagramType, isGraphType } from '../config/diagramTypes';
 import { CONNECT_STRATEGIES } from '../config/connectStrategies';
 import { ARCH_BOUNDARY_Z, ARCH_EDGE_Z } from '../utils/architectureEdgeLayout';
@@ -81,6 +89,8 @@ function captureSnapshot(s) {
     relationships: s.relationships,
     nodes: s.nodes,
     flowEdges: s.flowEdges,
+    participants: s.participants,
+    messages: s.messages,
   };
 }
 
@@ -108,6 +118,12 @@ export const useEditorStore = create((set, get) => ({
   flowEdges: [],
   canvasState: { x: 0, y: 0, zoom: 1 },
   selectedTableId: null,
+  // Sequence (dataShape 'sequence'): model berurutan, bukan node/edge.
+  // `sequenceOptions` + seleksi sengaja di luar history.
+  participants: [],
+  messages: [],
+  sequenceOptions: { showNumbers: false },
+  selectedSequenceItem: null,
   isSidebarOpen: true,
   isDirty: false,
   isLoading: true,
@@ -178,7 +194,15 @@ export const useEditorStore = create((set, get) => ({
   _restoreSnapshot: (snap) => {
     // Undo/redo membatalkan gestur drag yang sedang berjalan.
     _dragInProgress = false;
-    set({ tables: snap.tables, relationships: snap.relationships, nodes: snap.nodes, flowEdges: snap.flowEdges });
+    set({
+      tables: snap.tables,
+      relationships: snap.relationships,
+      nodes: snap.nodes,
+      flowEdges: snap.flowEdges,
+      // Snapshot lama (sebelum tipe sequence) tidak punya kunci ini.
+      participants: snap.participants ?? [],
+      messages: snap.messages ?? [],
+    });
     const { _vaultPath, _projectId, _filename } = get();
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -220,6 +244,15 @@ export const useEditorStore = create((set, get) => ({
     set({ _autoSaveTimer: timer });
   },
 
+  /** Simpan segera (Cmd/Ctrl+S, sebelum meninggalkan halaman). */
+  flush: async () => {
+    if (get()._autoSaveTimer) {
+      clearTimeout(get()._autoSaveTimer);
+      set({ _autoSaveTimer: null });
+    }
+    if (get().isDirty) await get().saveDiagram();
+  },
+
   markDirty: (vaultPath, projectId, filename) => {
     const { _pendingSave } = get();
     // Only capture save context on first dirty mark
@@ -231,6 +264,8 @@ export const useEditorStore = create((set, get) => ({
   },
 
   loadDiagram: async (vaultPath, projectId, filename) => {
+    // Perubahan <1500 ms pada diagram sebelumnya disimpan dulu, bukan dibuang.
+    if (get().isDirty) await get().flush();
     // Clear any existing auto-save timer before loading new diagram
     if (get()._autoSaveTimer) {
       clearTimeout(get()._autoSaveTimer);
@@ -254,6 +289,10 @@ export const useEditorStore = create((set, get) => ({
         ? migrateArchLayer(data.nodes || [], data.edges || [])
         : { nodes: data.nodes || [], edges: data.edges || [] };
 
+      // Normalisasi untuk SEMUA tipe: tipe lain mendapat [] kosong, jadi file
+      // rusak/field hilang tidak crash dan state lama tidak terbawa.
+      const seq = normalizeSequence(data);
+
       set({
         diagramMeta: data.meta,
         tables: (data.tables || []).map(t => ({ ...t, type: 'table' })),
@@ -261,6 +300,10 @@ export const useEditorStore = create((set, get) => ({
         nodes: layers.nodes,
         flowEdges: layers.edges,
         canvasState: parsedCanvas,
+        participants: seq.participants,
+        messages: seq.messages,
+        sequenceOptions: seq.options,
+        selectedSequenceItem: null,
         isLoading: false,
         isDirty: false,
         selectedTableId: null,
@@ -275,7 +318,10 @@ export const useEditorStore = create((set, get) => ({
   },
 
   saveDiagram: async () => {
-    const { _pendingSave, diagramMeta, tables, relationships, nodes, flowEdges, canvasState, isDirty } = get();
+    const {
+      _pendingSave, diagramMeta, tables, relationships, nodes, flowEdges, canvasState,
+      participants, messages, sequenceOptions, isDirty,
+    } = get();
     if (!_pendingSave || !diagramMeta || !isDirty) return;
 
     const { vaultPath, projectId, filename } = _pendingSave;
@@ -293,6 +339,14 @@ export const useEditorStore = create((set, get) => ({
         nodes,
         edges: flowEdges
       };
+
+      // Ditulis SETELAH literal, bukan spread bernilai undefined: file lima
+      // tipe lama tetap 7 kunci.
+      if (getDiagramType(diagramMeta.type).dataShape === 'sequence') {
+        fileData.participants = participants;
+        fileData.messages = messages;
+        fileData.options = sequenceOptions;
+      }
 
       await window.api.writeFile(filePath, JSON.stringify(fileData, null, 2));
       set({ isDirty: false, diagramMeta: updatedMeta, _pendingSave: null });
@@ -653,6 +707,132 @@ export const useEditorStore = create((set, get) => ({
     get().autoSave();
   },
 
+  // === SEQUENCE: participants + messages =================================
+  // Semua aksi membuat array/objek BARU: `captureSnapshot` menyimpan
+  // referensi, jadi mutasi in-place merusak state hidup sekaligus history.
+
+  addSequenceParticipant: (kind = SQ_DEFAULT_PARTICIPANT_KIND) => {
+    const { participants, _vaultPath, _projectId, _filename } = get();
+    const participant = {
+      id: `sqp-${Date.now()}`,
+      name: SQ_DEFAULT_PARTICIPANT_NAME,
+      kind,
+    };
+    get().commitHistory('action');
+    set({ participants: [...participants, participant] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Ganti nama / kind. Satu snapshot per burst ketikan. */
+  updateSequenceParticipant: (id, patch) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
+    set((state) => ({
+      participants: state.participants.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  moveSequenceParticipant: (id, delta) => {
+    const { participants } = get();
+    const from = participants.findIndex((p) => p.id === id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= participants.length) return;
+    get().commitHistory('action');
+    const next = [...participants];
+    [next[from], next[to]] = [next[to], next[from]];
+    const { _vaultPath, _projectId, _filename } = get();
+    set({ participants: next });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Hapus peserta + SEMUA pesan yang melibatkannya dalam satu snapshot. */
+  deleteSequenceParticipant: (id) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
+    set((state) => ({
+      participants: state.participants.filter((p) => p.id !== id),
+      messages: state.messages.filter((m) => m.from !== id && m.to !== id),
+      selectedSequenceItem:
+        state.selectedSequenceItem?.id === id ? null : state.selectedSequenceItem,
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Tambah pesan di akhir, atau tepat setelah `afterId` (item terpilih). */
+  addSequenceMessage: (patch = {}, afterId = null) => {
+    const { participants, messages, _vaultPath, _projectId, _filename } = get();
+    if (participants.length === 0) return; // pesan butuh peserta
+
+    const from = patch.from || participants[0].id;
+    const message = {
+      id: `sqm-${Date.now()}`,
+      from,
+      to: patch.to || (participants[1] || participants[0]).id,
+      label: patch.label ?? SQ_DEFAULT_MESSAGE_LABEL,
+      kind: SQ_MESSAGE_KINDS.includes(patch.kind) ? patch.kind : SQ_DEFAULT_MESSAGE_KIND,
+    };
+
+    const found = afterId ? messages.findIndex((m) => m.id === afterId) : -1;
+    const at = found >= 0 ? found + 1 : messages.length;
+
+    get().commitHistory('action');
+    set({ messages: [...messages.slice(0, at), message, ...messages.slice(at)] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  updateSequenceMessage: (id, patch) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
+    set((state) => ({
+      messages: state.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  moveSequenceMessage: (id, delta) => {
+    const { messages } = get();
+    const from = messages.findIndex((m) => m.id === id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= messages.length) return;
+    get().commitHistory('action');
+    const next = [...messages];
+    [next[from], next[to]] = [next[to], next[from]];
+    const { _vaultPath, _projectId, _filename } = get();
+    set({ messages: next });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  deleteSequenceMessage: (id) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
+    set((state) => ({
+      messages: state.messages.filter((m) => m.id !== id),
+      selectedSequenceItem:
+        state.selectedSequenceItem?.id === id ? null : state.selectedSequenceItem,
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** `{ type: 'participant' | 'message', id }` — di luar history. */
+  setSelectedSequenceItem: (item) => set({ selectedSequenceItem: item }),
+
+  /** Opsi tampilan: bukan isi diagram, jadi tanpa snapshot history. */
+  toggleSequenceNumbers: () => {
+    const { sequenceOptions, _vaultPath, _projectId, _filename } = get();
+    set({ sequenceOptions: { ...sequenceOptions, showNumbers: !sequenceOptions.showNumbers } });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
 
 
   // === USE CASE: replace all (untuk import JSON) ===
@@ -819,6 +999,10 @@ export const useEditorStore = create((set, get) => ({
       nodes: [],
       flowEdges: [],
       canvasState: { x: 0, y: 0, zoom: 1 },
+      participants: [],
+      messages: [],
+      sequenceOptions: { showNumbers: false },
+      selectedSequenceItem: null,
       isDirty: false,
       isLoading: false,
       loadError: null,
