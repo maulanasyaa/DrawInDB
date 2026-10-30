@@ -31,6 +31,7 @@ Deskripsi kode saat ini (per 2026-10-30), bukan target.
 | `flowchart` | — | `nodes[]` + `edges[]` |
 | `usecase` | — | `nodes[]` + `edges[]` (edge punya `data.relType`) |
 | `statemachine` | — | `nodes[]` + `edges[]` (node `data.type` = initial/state/final/choice; edge punya `data.label`) |
+| `architecture` | — | `nodes[]` + `edges[]` (node `data.type` = person/system/container/database/boundary; edge punya `data.label` + `data.technology`) |
 
 Semua field ditulis `saveDiagram()`; tipe yang tidak memakai `tables` menulis array kosong. `canvas` legacy berformat `{pan:{x,y},zoom}` dinormalisasi saat load.
 
@@ -38,11 +39,11 @@ Semua field ditulis `saveDiagram()`; tipe yang tidak memakai `tables` menulis ar
 Entri `DIAGRAM_TYPES[<id>]`:
 `id`, `label`, `labelPlural`, `placeholder`, `badge`, `backLabel`, `description`, `icon`, `dataShape` (`tables` | `graph`), `hasDbType`, `exports` `{ png, sql, json }`.
 
-Saat ini: `erd` (tables, hasDbType, png+sql), `flowchart` (graph, png), `usecase` (graph, json), `statemachine` (graph, png).
+Saat ini: `erd` (tables, hasDbType, png+sql), `flowchart` (graph, png), `usecase` (graph, json), `statemachine` (graph, png), `architecture` (graph, png).
 
 Helper: `getDiagramType(id)` (fallback ke `DEFAULT_DIAGRAM_TYPE = 'erd'` bila id tak dikenal/undefined), `isGraphType(id)`, `isErdType(id)`, `DIAGRAM_TYPE_LIST` (urutan render kartu).
 
-Pemakai: `EditorHeader` + `DiagramCard` + `DiagramList` (`getDiagramType` → `hasDbType`, `exports`), `ProjectDetail` (`DIAGRAM_TYPE_LIST`, grid 4 kartu), `Home` (`getDiagramType().badge`, urutan badge dari `DIAGRAM_TYPE_LIST`).
+Pemakai: `EditorHeader` + `DiagramCard` + `DiagramList` (`getDiagramType` → `hasDbType`, `exports`), `ProjectDetail` (`DIAGRAM_TYPE_LIST`, grid 5 kartu: `xl:grid-cols-5`), `Home` (`getDiagramType().badge`, urutan badge dari `DIAGRAM_TYPE_LIST`; badge `flex-wrap` jadi 5 tipe tidak meluber).
 
 ### 2a. Config editor per tipe: `src/config/editorTypes.jsx`
 Pemisahan supaya `diagramTypes.js` tetap bebas JSX. `EDITOR_TYPES[<id>]`:
@@ -51,7 +52,7 @@ Helper: `getEditorConfig(id)` (fallback entri `erd`). `Editor.jsx` hanya membaca
 `tests/editorStore.statemachine.test.jsx` menjaga korespondensi: setiap id di `DIAGRAM_TYPES` punya entri `EDITOR_TYPES` dan strategi `CONNECT_STRATEGIES` (dan sebaliknya).
 
 ### 2b. Strategi koneksi per tipe: `src/config/connectStrategies.js`
-`CONNECT_STRATEGIES[<id>](connection, { get })` mengembalikan patch state (`{ flowEdges?, tables?, relationships? }`) atau `null` (ditolak). Store hanya me-lookup lewat `getDiagramType(type).id` lalu men-set patch + satu snapshot history. `erd` memakai FK/`clearOrphanFk`, `flowchart` label Yes/No, `usecase` `data.relType`, `statemachine` edge `type:'statemachine'` tanpa dedupe (mengizinkan beberapa transition & self-transition).
+`CONNECT_STRATEGIES[<id>](connection, { get })` mengembalikan patch state (`{ flowEdges?, tables?, relationships? }`) atau `null` (ditolak). Store hanya me-lookup lewat `getDiagramType(type).id` lalu men-set patch + satu snapshot history. `erd` memakai FK/`clearOrphanFk`, `flowchart` label Yes/No, `usecase` `data.relType`, `statemachine` edge `type:'statemachine'` tanpa dedupe (mengizinkan beberapa transition & self-transition), `architecture` edge `data:{label,technology}` tanpa dedupe tapi **menolak self-loop** (return `null`).
 
 ## 3. Alur editor
 1. `Editor.jsx` ambil `vaultPath` dari `vaultStore`, panggil `editorStore.loadDiagram(vaultPath, projectId, filename)`.
@@ -76,22 +77,28 @@ Tiga titik hardcode lama (`Editor.jsx` nodeTypes/edgeTypes/onDrop/renderSidebar/
 
 | Lokasi | Hal |
 |--------|-----|
-| `store/editorStore.js` | Action tambah node per tipe tetap terpisah (`addTable`, `addFlowNode`, `addUseCaseNode`, `addStateMachineNode`) dan direferensikan dari `EDITOR_TYPES[<id>].addNode` — bukan percabangan tipe di dalam action. |
+| `store/editorStore.js` | Action tambah node per tipe tetap terpisah (`addTable`, `addFlowNode`, `addUseCaseNode`, `addStateMachineNode`, `addArchitectureNode`) dan direferensikan dari `EDITOR_TYPES[<id>].addNode` — bukan percabangan tipe di dalam action. |
 | `components/editor/EditorHeader.jsx` | Handler export SQL/JSON tetap di-gate `exports.*`; hanya `handleExportSQL`/`handleExportJSON` yang secara intrinsik milik ERD/Use Case. |
 | `utils/useCaseJson.js` | Validasi import hardcode `meta.type !== "usecase"` (hanya dipakai jalur export JSON usecase). |
-| `utils/exportImage.js` | Filter badge peringatan berbasis atribut `title` (Flowchart + State Machine). Registry tidak menyimpan daftar judul; menambah tipe berperingatan baru = menambah satu prefix di sini. |
+| `utils/exportImage.js` | Filter badge peringatan berbasis atribut `title` (Flowchart + State Machine + Architecture). Registry tidak menyimpan daftar judul; menambah tipe berperingatan baru = menambah satu prefix di sini (Architecture memakai satu prefix `Architecture:` untuk semua pesannya). |
 
 Selain itu, pemilihan label/badge/ikon/field DB/export/tombol, layout editor, sidebar, tips, overlay marker, dan perilaku koneksi sudah lewat registry.
 
 ## 5. Checklist menambah tipe diagram baru (`<id>`)
 
 1. `src/config/diagramTypes.js` — tambah entri `DIAGRAM_TYPES[<id>]` (lengkapi `dataShape`, `hasDbType`, `exports`, `icon`); tambahkan test di `tests/diagramTypes.test.js` (termasuk urutan `DIAGRAM_TYPE_LIST`).
-2. `src/config/<id>Types.js` — konstanta node/edge tipe (pola `useCaseTypes.js` / `stateMachineTypes.js`). Bebas JSX.
+2. `src/config/<id>Types.js` — konstanta node/edge tipe (pola `useCaseTypes.js` / `stateMachineTypes.js` / `architectureTypes.js`). Bebas JSX; simpan ukuran default, label default, field tambahan per subtype, dan daftar palet di sini.
 3. `src/components/editor/<Id>Node.jsx` (+ `<Id>Edge.jsx`, `<Id>Sidebar.jsx`, `<Id>Markers.jsx` bila perlu) — drag source pakai `dataTransfer` key `application/reactflow`.
-4. `src/store/editorStore.js` — action tambah node (pola `addFlowNode`/`addStateMachineNode`).
+4. `src/store/editorStore.js` — action tambah node (pola `addFlowNode`/`addStateMachineNode`/`addArchitectureNode`) + action edit field edge bila edge punya data custom (pola `setStateMachineEdgeLabel` / `setArchitectureEdgeData`, `commitHistory('typing')`).
 5. `src/config/connectStrategies.js` — satu strategi `CONNECT_STRATEGIES[<id>]`.
 6. `src/config/editorTypes.jsx` — satu entri `EDITOR_TYPES[<id>]` (sidebar, nodeTypes, edgeTypes, defaultEdge, addNode, tips, overlays). **`pages/Editor.jsx` tidak perlu diubah.**
 7. Test baru: `tests/editorStore.<id>.test.jsx` (atau `.js` bila tak import JSX), plus kasus di `tests/roundtrip.test.js`. Korespondensi registry ↔ `EDITOR_TYPES` ↔ `CONNECT_STRATEGIES` sudah diawasi `tests/editorStore.statemachine.test.jsx`.
 8. Jalankan `npm test` dan `npx vite build`.
 
-7. Test: tambah kasus roundtrip di `tests/roundtrip.test.js` + store test baru; jalankan `npm test` dan `npx vite build`.
+**Tipe berperingatan** (`src/utils/<id>Validation.js`): semua pesan berprefix satu string tipe (pola `Architecture: `) supaya `utils/exportImage.js` hanya perlu menambah satu baris `title.startsWith("<Type>:")`.
+
+**Halaman non-editor** (`ProjectDetail` grid kartu, `Home` badge) membaca registry, jadi tidak perlu disentuh per tipe — cukup cek layout saat jumlah tipe bertambah (grid ProjectDetail memakai `xl:grid-cols-5`).
+
+### Catatan: langkah kini lebih singkat dari saat State Machine
+State Machine adalah tipe pertama yang memakai `EDITOR_TYPES`/`CONNECT_STRATEGIES`; pembuatan kedua file itu ikut tercatat di commit yang sama, jadi waktu itu juga menyentuh `pages/Editor.jsx` dan `EditorHeader` (`6b15593`, −76 baris di `Editor.jsx`). Setelah pemisahan itu selesai, Architecture hanya menambah entri ke dua file config tersebut — **`Editor.jsx` dan `EditorHeader.jsx` tidak diubah sama sekali**, begitu pula `onNodesChange`/`onEdgesChange`/`onConnect` di store (semua lewat `isGraphType` + lookup registry). Yang tetap harus ditulis per tipe: file konstanta, komponen node/edge/sidebar/markers, action store, strategi koneksi, validasi, dan test.
+
