@@ -53,6 +53,15 @@ async function buildAndSave(meta) {
     const [a, b] = s().nodes.map((n) => n.id);
     s().onConnect({ source: a, target: b });
     s().setStateMachineEdgeLabel(s().flowEdges[0].id, 'submit');
+  } else if (meta.type === 'architecture') {
+    s().addArchitectureNode('person', { x: 0, y: 0 });
+    s().addArchitectureNode('container', { x: 240, y: 0 });
+    const [a, b] = s().nodes.map((n) => n.id);
+    s().onConnect({ source: a, target: b });
+    s().setArchitectureEdgeData(s().flowEdges[0].id, {
+      label: 'Mengirim order',
+      technology: 'HTTPS/JSON',
+    });
   } else {
     s().addUseCaseNode('actor', { x: 0, y: 0 });
     s().addUseCaseNode('useCase', { x: 200, y: 0 });
@@ -79,6 +88,7 @@ const META = {
   flowchart: { type: 'flowchart', name: 'Flow' },
   usecase: { type: 'usecase', name: 'UC' },
   statemachine: { type: 'statemachine', name: 'Order Status' },
+  architecture: { type: 'architecture', name: 'Online Store System' },
 };
 
 let files;
@@ -91,7 +101,7 @@ afterEach(() => {
 });
 
 describe('round-trip save → load', () => {
-  it.each(['erd', 'flowchart', 'usecase', 'statemachine'])(
+  it.each(['erd', 'flowchart', 'usecase', 'statemachine', 'architecture'])(
     '%s: state → JSON → state identik',
     async (type) => {
       const meta = META[type];
