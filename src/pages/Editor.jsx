@@ -186,7 +186,9 @@ function EditorContent() {
           </div>
         )}
 
-        {/* deleteKeyCode default React Flow hanya "Backspace"; tambah Delete. */}
+        {/* deleteKeyCode default React Flow hanya "Backspace"; tambah Delete
+            (keyboard Mac tanpa Backspace). Ini BUKAN penyebab seleksi node
+            gagal — lihat onNodesChange di editorStore. */}
         <ReactFlow
           nodes={isNodeBased ? nodes : tables}
           edges={isNodeBased ? flowEdges : relationships}
