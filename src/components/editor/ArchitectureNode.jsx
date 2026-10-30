@@ -1,5 +1,5 @@
-import React from 'react';
-import { Handle, Position, useReactFlow } from 'reactflow';
+import React, { useEffect } from 'react';
+import { Handle, Position, useReactFlow, useUpdateNodeInternals } from 'reactflow';
 import { NodeResizer } from '@reactflow/node-resizer';
 import '@reactflow/node-resizer/dist/style.css';
 import { FiAlertCircle } from 'react-icons/fi';
@@ -9,6 +9,7 @@ import {
   ARCH_MIN_SIZES,
   ARCH_RESIZABLE,
   ARCH_HANDLE_STYLES,
+  ARCH_SHAPE_SIZES,
 } from '../../config/architectureTypes';
 import { validateArchitecture } from '../../utils/architectureValidation';
 
@@ -16,14 +17,9 @@ const handleBase =
   '!w-3 !h-3 !bg-canvas !border-2 !border-accent !z-50 !pointer-events-auto transition-opacity opacity-0 group-hover:opacity-100';
 
 /**
- * Posisi handle di tepi BENTUK, bukan tepi kotak node. `anchors` =
- * `ARCH_HANDLE_STYLES[subtype]`: `top`/`bottom` menggeser handle di sumbu x,
- * `left`/`right` di sumbu y (kelas bawaan `react-flow__handle-<pos>` sudah
- * mengatur sumbu tegak lurus tepi).
- */
-/**
- * Handle di titik anchor bentuk (lihat `ARCH_HANDLE_ANCHORS`): `left`/`right`
- * menggeser handle di sumbu x, `top`/`bottom` di sumbu y.
+ * Handle di titik anchor bentuk (lihat `ARCH_HANDLE_ANCHORS`). Komponen ini
+ * harus dirender di dalam wrapper selebar-lebih kotak BENTUK (`ARCH_SHAPE_SIZES`),
+ * bukan di root node — kalau tidak, label/deskripsi ikut menggeser anchor.
  */
 function NodeHandles({ anchors = {} }) {
   return (
@@ -67,10 +63,19 @@ function AutoTextarea({ value, onChange, placeholder, className = '' }) {
 
 export default function ArchitectureNode({ id, data, selected }) {
   const subtype = data?.type || ARCH_NODE_TYPES.CONTAINER;
-  // Anchor handle mengikuti bentuk (lihat ARCH_HANDLE_STYLES).
-  const anchors = ARCH_HANDLE_STYLES[subtype] || {};
+  // Anchor handle relatif kotak bentuk (lihat ARCH_HANDLE_ANCHORS).
+  const anchors = ARCH_HANDLE_STYLES[subtype] || ARCH_HANDLE_STYLES.container;
+  // Ukuran bentuk tetap; null untuk subtype yang bentuknya kotak node penuh.
+  const shape = ARCH_SHAPE_SIZES[subtype];
   const updateNodeData = useEditorStore((state) => state.updateNodeData);
   const { getNodes, getEdges } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
+
+  // Bentuk berganti (subtype berubah) → posisi handle berubah tanpa perubahan
+  // ukuran node, jadi batas handle harus diukur ulang manual.
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, subtype, updateNodeInternals]);
 
   // Validasi global (butuh seluruh graf), dihitung sekali per render.
   const { nodeWarnings } = validateArchitecture(getNodes(), getEdges());
@@ -95,15 +100,17 @@ export default function ArchitectureNode({ id, data, selected }) {
   if (subtype === ARCH_NODE_TYPES.PERSON) {
     return (
       <div className="w-full h-full relative group flex flex-col items-center">
-        <NodeHandles anchors={anchors} />
+        <div className="relative shrink-0" style={shape}>
+          <NodeHandles anchors={anchors} />
 
-        <svg viewBox="0 0 40 70" preserveAspectRatio="xMidYMid meet" className="w-1/2 h-3/5 drop-shadow-sm">
-          <circle cx="20" cy="10" r="7" fill={fillColor} stroke={strokeColor} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-          <line x1="20" y1="17" x2="20" y2="45" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          <line x1="8" y1="26" x2="32" y2="26" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          <line x1="20" y1="45" x2="10" y2="64" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          <line x1="20" y1="45" x2="30" y2="64" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        </svg>
+          <svg viewBox="0 0 40 70" className="w-full h-full drop-shadow-sm">
+            <circle cx="20" cy="10" r="7" fill={fillColor} stroke={strokeColor} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+            <line x1="20" y1="17" x2="20" y2="45" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            <line x1="8" y1="26" x2="32" y2="26" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            <line x1="20" y1="45" x2="10" y2="64" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            <line x1="20" y1="45" x2="30" y2="64" stroke={strokeColor} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          </svg>
+        </div>
 
         <div className="w-full flex flex-col items-center px-2 min-h-0">
           <AutoTextarea
@@ -173,18 +180,20 @@ export default function ArchitectureNode({ id, data, selected }) {
   if (subtype === ARCH_NODE_TYPES.DATABASE) {
     return (
       <div className="w-full h-full relative group flex flex-col items-center justify-center gap-1">
-        <NodeHandles anchors={anchors} />
+        <div className="relative shrink-0" style={shape}>
+          <NodeHandles anchors={anchors} />
 
-        <svg viewBox="0 0 60 40" preserveAspectRatio="xMidYMid meet" className="w-2/3 h-1/2 drop-shadow-sm">
-          <ellipse cx="30" cy="8" rx="26" ry="7" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-          <path
-            d="M 4 8 L 4 32 A 26 7 0 0 0 56 32 L 56 8"
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth="1.5"
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
+          <svg viewBox="0 0 60 40" className="w-full h-full drop-shadow-sm">
+            <ellipse cx="30" cy="8" rx="26" ry="7" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+            <path
+              d="M 4 8 L 4 32 A 26 7 0 0 0 56 32 L 56 8"
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+        </div>
 
         <div className="w-full flex flex-col items-center px-2">
           <AutoTextarea

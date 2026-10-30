@@ -20,42 +20,51 @@ export const ARCH_DEFAULT_SIZES = {
 };
 
 /**
- * Anchor handle per subtype: koordinat PENUH (x, y) pecahan 0..1 terhadap kotak
- * node, per sisi. Satu-satunya sumber angka — dipakai `ARCH_HANDLE_STYLES`
- * (style handle React Flow) dan `geometryOf()` (ujung edge). Handle bawaan
- * React Flow selalu menempel di tepi KOTAK node; subtype yang bentuknya bukan
- * kotak penuh perlu kedua sumbu.
- *
- * Database: silinder `viewBox 0 0 60 40` dirender 2/3 × 1/2 kotak, rata tengah
- * → x 30..150 (16.67%..83.33%), y 2..57 dari 180×110.
- *  • top    → puncak ellipse (y 0), x 25%
- *  • bottom → dasar silinder (y 52%), x 75%
- *  • left / right → dinding silinder (x 16.67% / 83.33%), y 8% (puncak ellipse)
+ * Ukuran kotak BENTUK visual (px) untuk subtype yang bentuknya bukan kotak
+ * node penuh. Aspeknya sengaja sama dengan viewBox SVG-nya, supaya
+ * `preserveAspectRatio` tidak menyisakan letterbox dan pecahan anchor di bawah
+ * = koordinat SVG persis. Subtype tanpa entri → bentuknya seluruh kotak node.
  */
-export const ARCH_HANDLE_ANCHORS = {
-  [ARCH_NODE_TYPES.PERSON]: {
-    top: { x: 0.5, y: 0.02 },
-    bottom: { x: 0.5, y: 1 },
-    left: { x: 0.35, y: 0.25 },
-    right: { x: 0.65, y: 0.25 },
-  },
-  [ARCH_NODE_TYPES.BOUNDARY]: {
-    top: { x: 0.5, y: 0 },
-    bottom: { x: 0.5, y: 1 },
-    left: { x: 0, y: 0.5 },
-    right: { x: 1, y: 0.5 },
-  },
-  [ARCH_NODE_TYPES.DATABASE]: {
-    top: { x: 0.25, y: 0 },
-    bottom: { x: 0.75, y: 0.52 },
-    left: { x: 0.1667, y: 0.08 },
-    right: { x: 0.8333, y: 0.08 },
-  },
+export const ARCH_SHAPE_SIZES = {
+  [ARCH_NODE_TYPES.PERSON]: { width: 56, height: 98 }, // viewBox 40×70
+  [ARCH_NODE_TYPES.DATABASE]: { width: 108, height: 72 }, // viewBox 60×40
+};
+
+const BOX_ANCHORS = {
+  top: { x: 0.5, y: 0 },
+  right: { x: 1, y: 0.5 },
+  bottom: { x: 0.5, y: 1 },
+  left: { x: 0, y: 0.5 },
 };
 
 /**
- * `style` handle React Flow: kedua sumbu eksplisit (menimpa `-4px`/`50%` kelas
- * bawaan `react-flow__handle-<pos>`), supaya titik handle tepat di tepi bentuk.
+ * Anchor handle per subtype: pecahan 0..1 terhadap kotak BENTUK visual
+ * (`ARCH_SHAPE_SIZES`; subtype tanpa bentuk = kotak node) — BUKAN terhadap
+ * kotak node yang ikut memuat label/deskripsi. Titiknya = tengah stroke bentuk.
+ */
+export const ARCH_HANDLE_ANCHORS = {
+  [ARCH_NODE_TYPES.PERSON]: {
+    top: { x: 0.5, y: 3 / 70 }, // puncak kepala (cy 10, r 7)
+    right: { x: 32 / 40, y: 26 / 70 }, // ujung lengan
+    bottom: { x: 0.5, y: 64 / 70 }, // ujung kaki
+    left: { x: 8 / 40, y: 26 / 70 }, // ujung lengan
+  },
+  [ARCH_NODE_TYPES.DATABASE]: {
+    top: { x: 0.5, y: 1 / 40 }, // puncak ellipse (cy 8, ry 7)
+    right: { x: 56 / 60, y: 0.5 }, // dinding silinder
+    bottom: { x: 0.5, y: 39 / 40 }, // dasar arc (32 + 7)
+    left: { x: 4 / 60, y: 0.5 }, // dinding silinder
+  },
+  [ARCH_NODE_TYPES.SYSTEM]: BOX_ANCHORS,
+  [ARCH_NODE_TYPES.CONTAINER]: BOX_ANCHORS,
+  [ARCH_NODE_TYPES.BOUNDARY]: BOX_ANCHORS,
+};
+
+/**
+ * `style` handle React Flow. `left`/`top` + `translate(-50%,-50%)` menaruh
+ * TITIK TENGAH handle tepat di anchor; `right`/`bottom` di-`auto`-kan karena
+ * kelas `react-flow__handle-<pos>` memasang `-4px` di sumbu itu (dan kelasnya
+ * hanya memusatkan satu sumbu, jadi transform-nya ditimpa inline).
  */
 export const ARCH_HANDLE_STYLES = Object.fromEntries(
   Object.entries(ARCH_HANDLE_ANCHORS).map(([subtype, sides]) => [
@@ -63,7 +72,13 @@ export const ARCH_HANDLE_STYLES = Object.fromEntries(
     Object.fromEntries(
       Object.entries(sides).map(([side, { x, y }]) => [
         side,
-        { left: `${x * 100}%`, top: `${y * 100}%` },
+        {
+          left: `${x * 100}%`,
+          top: `${y * 100}%`,
+          right: 'auto',
+          bottom: 'auto',
+          transform: 'translate(-50%, -50%)',
+        },
       ]),
     ),
   ]),
