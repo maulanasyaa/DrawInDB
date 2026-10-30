@@ -8,6 +8,7 @@ Deskripsi kode saat ini (per 2026-10-30), bukan target.
   .drawindb/config.json          { vault_name, created_at, version, migrated }
   projects/<projId>/project.json { id, name, createdAt, updatedAt }
   projects/<projId>/diagrams/<safeName>_<type>.json
+  projects/<projId>/docs/<safeName>.json          (opsional, dibuat saat PRD pertama)
 ```
 
 - `projects` tidak ada di vault baru sampai `createProject()` dipanggil.
@@ -34,6 +35,29 @@ Deskripsi kode saat ini (per 2026-10-30), bukan target.
 | `architecture` | — | `nodes[]` + `edges[]` (node `data.type` = person/system/container/database/boundary; edge punya `data.label` + `data.technology`) |
 
 Semua field ditulis `saveDiagram()`; tipe yang tidak memakai `tables` menulis array kosong. `canvas` legacy berformat `{pan:{x,y},zoom}` dinormalisasi saat load.
+
+### 1a. Dokumen PRD (`docs/`) — BUKAN tipe diagram
+Dokumen teks terstruktur per project. Tidak masuk `diagramTypes.js`/`editorTypes.jsx`, tidak memakai React Flow, dan tidak muncul di grid kartu tipe.
+
+```json
+{
+  "version": "1.0",
+  "meta": { "name", "type": "prd", "projectId", "created_at", "updated_at" },
+  "sections": [ { "id", "key", "title", "content" } ],
+  "stories":  [ { "id", "actor", "want", "benefit", "priority", "status", "links" } ]
+}
+```
+
+- `sections[].content` adalah markdown. Urutan default: `latar-belakang`, `tujuan-metrik`, `target-pengguna`, `fitur`, `nfr`, `di-luar-lingkup`, `asumsi-risiko`. Judul boleh diubah; `key` stabil.
+- `priority`: `must|should|could|wont`. `status`: `todo|doing|done`.
+- `links`: `{ diagramFile, diagramType, note? }` menunjuk diagram di project yang sama. Tautan tanpa target dirender sebagai "Diagram missing" dan tidak bisa diklik (tidak crash).
+- Section `fitur` tidak memakai `content` untuk tampilan: slot-nya diisi tabel `stories` saat edit, preview, dan export.
+- `normalizePrdDoc` (`src/utils/prd.js`) tahan file rusak: section default yang hilang disisipkan sesuai urutan canonical, section asing dipertahankan di akhir, enum tak dikenal di-coerce, id kosong diisi. Idempotent.
+- Nama file selalu `sanitizeDocFilename(name)` → `[a-z0-9_].json`, jadi tidak bisa keluar dari `docs/`.
+- `openVault` membaca `docs/*.json` (lewati dotfile/non-`.json`, satu file rusak dilewati lewat try/catch) menjadi `project.documents: [{filename, name, type, updated_at}]`. Project lama tanpa `docs/` mendapat `[]` — tidak ada perubahan perilaku.
+- **Dua store, satu penulis masing-masing:** `vaultStore` memiliki daftar dokumen (`createDocument`/`renameDocument`/`deleteDocument`/`updateDocumentMeta`); `store/docStore.js` memiliki isi dokumen yang sedang dibuka + autosave 1500 ms, mirror `editorStore` (`markDirty`/`autoSave`/`saveDoc`/`flush`/`cleanup`). `saveDoc` memanggil `updateDocumentMeta` supaya daftar tidak basi tanpa re-`openVault`.
+- Berbeda dari editor diagram: unmount halaman dokumen **mem-flush** perubahan (bukan membuang), dan Cmd/Ctrl+S ditangani lewat `window.addEventListener('keydown')` karena `react-hotkeys-hook` mati di dalam textarea.
+- IPC: hanya `window.api` yang sudah ada, plus `fs:deleteDirectory` (`fs.rm` rekursif, dijaga `assertVaultAccess`) yang dipakai `deleteProject` — sebelumnya `deleteFile` (unlink) dipanggil pada direktori dan gagal.
 
 ## 2. Registry tipe: `src/config/diagramTypes.js`
 Entri `DIAGRAM_TYPES[<id>]`:
