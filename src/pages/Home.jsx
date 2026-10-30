@@ -27,26 +27,31 @@ function SchemaSketch() {
       viewBox="0 0 260 96"
       fill="none"
       aria-hidden="true"
-      className="sketch-draw text-muted"
+      className="text-muted"
     >
-      <g stroke="currentColor" strokeWidth="1">
+      <g className="sketch-lines" stroke="currentColor" strokeWidth="1">
         <rect {...shape} x="3.5" y="8.5" width="86" height="62" />
         <line {...shape} x1="3.5" y1="24.5" x2="89.5" y2="24.5" />
         <line {...shape} x1="12" y1="36.5" x2="60" y2="36.5" opacity=".45" />
         <line {...shape} x1="12" y1="46.5" x2="70" y2="46.5" opacity=".45" />
         <line {...shape} x1="12" y1="56.5" x2="54" y2="56.5" opacity=".45" />
-        <line {...shape} x1="89.5" y1="40" x2="124" y2="40" />
-        <line {...shape} x1="124" y1="40" x2="124" y2="58" />
-        <line {...shape} x1="124" y1="58" x2="160.5" y2="58" />
         <rect {...shape} x="160.5" y="24.5" width="86" height="62" />
         <line {...shape} x1="160.5" y1="40.5" x2="246.5" y2="40.5" />
         <line {...shape} x1="169" y1="52.5" x2="217" y2="52.5" opacity=".45" />
         <line {...shape} x1="169" y1="62.5" x2="227" y2="62.5" opacity=".45" />
         <line {...shape} x1="169" y1="72.5" x2="211" y2="72.5" opacity=".45" />
       </g>
+
+      {/* Relasi sebagai satu path (bukan tiga line) supaya bisa mengalir dari
+          tabel kiri ke kanan. Glow digambar sebagai path kembar dengan blur
+          statis — hanya opacity yang dianimasikan, jadi tidak ada raster ulang
+          filter tiap frame. */}
+      <path className="sketch-relation-glow" d="M89.5 40H124V58H160.5" pathLength="1" />
+      <path className="sketch-relation" d="M89.5 40H124V58H160.5" pathLength="1" />
+
       <g fill="currentColor" fontFamily="var(--font-mono)" fontSize="9">
         <text x="95" y="34">1</text>
-        <text x="129" y="52">*</text>
+        <text className="sketch-key-star" x="129" y="52">*</text>
       </g>
     </svg>
   );
