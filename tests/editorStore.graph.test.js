@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { USECASE_NODE_TYPES, USECASE_REL_TYPES } from '../src/config/useCaseTypes.js';
-import { seed, restore, s } from './helpers.js';
+import { seed, restore, s, node } from './helpers.js';
 
 const FLOW = { type: 'flowchart', name: 'Flow' };
 const UC = { type: 'usecase', name: 'UC' };
@@ -100,6 +100,21 @@ describe('editorStore Flowchart — onNodesChange', () => {
 
     expect(s().nodes.map((n) => n.id)).toEqual([b]);
     expect(s().flowEdges).toEqual([]);
+  });
+
+  // Regresi: early-return U1 membuang change `select` sehingga node hasil
+  // klik-lepas tak pernah selected dan Delete tak punya target.
+  it('change select diterapkan ke state tanpa menyentuh history/dirty', () => {
+    seed(FLOW, { nodes: [node('n1', 'process')] });
+
+    s().onNodesChange([{ id: 'n1', type: 'select', selected: true }]);
+
+    expect(s().nodes[0].selected).toBe(true);
+    expect(s().historyPast).toEqual([]);
+    expect(s().isDirty).toBe(false);
+
+    s().onNodesChange([{ id: 'n1', type: 'select', selected: false }]);
+    expect(s().nodes[0].selected).toBe(false);
   });
 });
 

@@ -552,6 +552,9 @@ export const useEditorStore = create((set, get) => ({
     // `position`, bukan dengan `type: 'drag'`.
     const isDragging = changes.some(c => c.dragging === true);
     const hasPosition = changes.some(c => c.type === 'position');
+    const hasData = changes.some(
+      c => c.type === 'remove' || c.type === 'add' || c.type === 'dimensions',
+    );
     if (isDragging) {
       // Satu entri per drag: change berikutnya dalam gestur yang sama
       // dilewati sampai gestur berakhir (tidak lagi membawa `dragging`).
@@ -559,11 +562,22 @@ export const useEditorStore = create((set, get) => ({
         _dragInProgress = true;
         get().commitHistory('action');
       }
-    } else if (changes.some(c => c.type === 'remove' || c.type === 'add' || c.type === 'dimensions')) {
+    } else if (hasData) {
       _dragInProgress = false;
       get().commitHistory('action');
-    } else if (!hasPosition && changes.length > 0) {
-      return; // selection / position_info saja: bukan perubahan bermakna
+    } else if (!hasPosition) {
+      // Selection / position_info: bukan perubahan bermakna (tidak masuk
+      // history, tidak bikin dirty) TAPI tetap harus diterapkan ke state.
+      // `nodes`/`tables` adalah sumber kebenaran React Flow (controlled):
+      // kalau dibuang, `node.selected` tak pernah jadi true dan Delete tak
+      // punya target.
+      _dragInProgress = false;
+      if (isGraphType(type)) {
+        set({ nodes: applyNodeChanges(changes, get().nodes) });
+      } else {
+        set({ tables: applyNodeChanges(changes, get().tables) });
+      }
+      return;
     }
     if (isGraphType(type)) {
       let nextNodes = applyNodeChanges(changes, get().nodes);

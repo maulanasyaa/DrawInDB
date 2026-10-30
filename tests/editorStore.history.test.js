@@ -213,6 +213,8 @@ describe('history — aturan stack', () => {
     s().onNodesChange([{ id: 'n1', type: 'select', selected: true }]);
     expect(past()).toHaveLength(0);
     expect(s().isDirty).toBe(false);
+    // Selection tetap harus sampai ke state: React Flow controlled.
+    expect(s().nodes[0].selected).toBe(true);
 
     s().onNodesChange([{ id: 'n1', type: 'position', position: { x: 0, y: 0 }, dragging: true }]);
     s().onNodesChange([{ id: 'n1', type: 'position', position: { x: 12, y: 0 }, dragging: true }]);
