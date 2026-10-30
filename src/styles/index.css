@@ -18,23 +18,27 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
 
-  --font-display: "EB Garamond", serif; /* Fallback for Waldenburg Light */
-  --font-body: "Inter", sans-serif;
+  --font-display: "Inter Tight Variable", "Inter Tight", sans-serif;
+  --font-body: "Inter Tight Variable", "Inter Tight", sans-serif;
+  /* `font-sans` is used by the app shell (App.jsx). */
+  --font-sans: "Inter Tight Variable", "Inter Tight", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
 }
 
 /* Theme Variables */
 :root[data-theme="light"], :root {
-  --bg-base: #f5f5f5;
+  --bg-base: #f5f5f4;
   --bg-surface: #ffffff;
-  --bg-surface-2: #fcfcfc;
-  --bg-hover: #f0f0f0;
+  --bg-surface-2: #fafaf9;
+  --bg-hover: #f0efed;
   --border: #e7e5e4;
   --border-focus: #a8a29e;
-  
+
   --text-primary: #0c0a09;
   --text-secondary: #4e4e4e;
-  --text-muted: #a8a29e;
-  
+  /* Naik dari #a8a29e: nilai lama ±2.3:1 di atas --bg-base. */
+  --text-muted: #6e6862;
+
   --accent: #292524;
   --accent-hover: #44403c;
   --danger: #ef4444;
@@ -65,11 +69,11 @@
   --bg-hover: #292524;
   --border: #44403c;
   --border-focus: #78716c;
-  
+
   --text-primary: #ffffff;
   --text-secondary: #d6d3d1;
   --text-muted: #a8a29e;
-  
+
   --accent: #ffffff;
   --accent-hover: #f5f5f4;
   --danger: #ef4444;
@@ -242,6 +246,26 @@ button, input, select, a, .interactive {
   border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: var(--shadow-soft);
+}
+
+/* Satu kali gambar, lalu diam. Dipakai SchemaSketch di landing.
+   Tiap elemen membawa pathLength="1" sehingga panjang path dinormalkan jadi 1
+   dan dasharray/offset tidak perlu diukur per-garis. */
+@keyframes sketchDraw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+.sketch-draw g > * {
+  stroke-dasharray: 1;
+  animation: sketchDraw 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Custom Scrollbar for sleekness */

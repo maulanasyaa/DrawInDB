@@ -97,7 +97,7 @@ export default function ReactFlowCanvas({ editorConfig }) {
         snapGrid={[12, 12]}
         className="bg-canvas"
       >
-        <Background color="#555" gap={24} size={1} />
+        <Background color="var(--dot-color)" gap={24} size={1} />
         <Controls className="!bg-surface !border-theme !fill-primary !text-primary shadow-lg" />
       </ReactFlow>
     </div>
