@@ -9,6 +9,25 @@ import {
 import { isGraphType } from '../config/diagramTypes';
 import { useToastStore } from './toastStore';
 
+/**
+ * Bersihkan flag `fk` pada kolom yang tadinya jadi target relasi yang dihapus.
+ * Aturan: `fk` hilang HANYA jika tidak ada relasi sisa yang menargetkan kolom
+ * yang sama. Tabel yang tidak berubah mempertahankan identitas objeknya.
+ */
+function clearOrphanFk(tables, removedRels, remainingRels) {
+  return tables.map((t) => {
+    let changed = false;
+    const columns = t.data.columns.map((col) => {
+      const wasTarget = removedRels.some((r) => r.target === t.id && r.targetHandle === col.id);
+      if (!wasTarget || !col.fk) return col;
+      if (remainingRels.some((r) => r.target === t.id && r.targetHandle === col.id)) return col;
+      changed = true;
+      return { ...col, fk: false };
+    });
+    return changed ? { ...t, data: { ...t.data, columns } } : t;
+  });
+}
+
 export const useEditorStore = create((set, get) => ({
   diagramMeta: null,
   tables: [],
@@ -151,30 +170,12 @@ export const useEditorStore = create((set, get) => ({
         e => e.source !== tableId && e.target !== tableId
       );
 
-      // For each removed relationship where the target is NOT the deleted table,
-      // check if the target column still has other relationships pointing to it
-      const updatedTables = state.tables
-        .filter(t => t.id !== tableId)
-        .map(t => {
-          let tableChanged = false;
-          const updatedCols = t.data.columns.map(col => {
-            // Check if this column was a target of a removed relationship
-            const wasTargetOfRemoved = removedRels.some(r => r.target === t.id && r.targetHandle === col.id);
-            if (wasTargetOfRemoved && col.fk) {
-              // Check if any remaining relationship still targets this column
-              const stillTargeted = remainingRels.some(r => r.target === t.id && r.targetHandle === col.id);
-              if (!stillTargeted) {
-                tableChanged = true;
-                return { ...col, fk: false };
-              }
-            }
-            return col;
-          });
-          return tableChanged ? { ...t, data: { ...t.data, columns: updatedCols } } : t;
-        });
-
       return {
-        tables: updatedTables,
+        tables: clearOrphanFk(
+          state.tables.filter(t => t.id !== tableId),
+          removedRels,
+          remainingRels
+        ),
         relationships: remainingRels,
         selectedTableId: state.selectedTableId === tableId ? null : state.selectedTableId,
       };
@@ -252,13 +253,11 @@ export const useEditorStore = create((set, get) => ({
     const { _vaultPath, _projectId, _filename } = get();
     set((state) => {
       // Also remove relationships tied to this column
-      const newEdges = state.relationships.filter(
-        e =>
-          !(
-            (e.source === tableId && e.sourceHandle === columnId) ||
-            (e.target === tableId && e.targetHandle === columnId)
-          )
-      );
+      const isTied = e =>
+        (e.source === tableId && e.sourceHandle === columnId) ||
+        (e.target === tableId && e.targetHandle === columnId);
+      const removedRels = state.relationships.filter(isTied);
+      const newEdges = state.relationships.filter(e => !isTied(e));
 
       const newTables = state.tables.map(t => {
         if (t.id === tableId) {
@@ -270,7 +269,10 @@ export const useEditorStore = create((set, get) => ({
         return t;
       });
 
-      return { tables: newTables, relationships: newEdges };
+      return {
+        tables: clearOrphanFk(newTables, removedRels, newEdges),
+        relationships: newEdges,
+      };
     });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -318,9 +320,14 @@ export const useEditorStore = create((set, get) => ({
 
   deleteRelationship: (edgeId) => {
     const { _vaultPath, _projectId, _filename } = get();
-    set((state) => ({
-      relationships: state.relationships.filter(e => e.id !== edgeId),
-    }));
+    set((state) => {
+      const removedRels = state.relationships.filter(e => e.id === edgeId);
+      const remainingRels = state.relationships.filter(e => e.id !== edgeId);
+      return {
+        relationships: remainingRels,
+        tables: clearOrphanFk(state.tables, removedRels, remainingRels),
+      };
+    });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
@@ -438,29 +445,10 @@ export const useEditorStore = create((set, get) => ({
         const currentRelationships = get().relationships;
         const removedRels = currentRelationships.filter(r => removedIds.includes(r.id));
         const remainingRels = currentRelationships.filter(r => !removedIds.includes(r.id));
-        
-        // For each removed relationship, check if target column still has other relationships pointing to it
-        const updatedTables = get().tables.map(t => {
-          let tableChanged = false;
-          const updatedCols = t.data.columns.map(col => {
-            // Check if this column was a target of a removed relationship
-            const wasTargetOfRemoved = removedRels.some(r => r.target === t.id && r.targetHandle === col.id);
-            if (wasTargetOfRemoved && col.fk) {
-              // Check if any remaining relationship still targets this column
-              const stillTargeted = remainingRels.some(r => r.target === t.id && r.targetHandle === col.id);
-              if (!stillTargeted) {
-                tableChanged = true;
-                return { ...col, fk: false };
-              }
-            }
-            return col;
-          });
-          return tableChanged ? { ...t, data: { ...t.data, columns: updatedCols } } : t;
-        });
-        
-        set({ 
+
+        set({
           relationships: applyEdgeChanges(changes, currentRelationships),
-          tables: updatedTables
+          tables: clearOrphanFk(get().tables, removedRels, remainingRels),
         });
       } else {
         set({ relationships: applyEdgeChanges(changes, get().relationships) });

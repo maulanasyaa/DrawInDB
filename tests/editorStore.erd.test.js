@@ -33,6 +33,29 @@ function connectUserToOrder() {
   });
 }
 
+// users.id (PK) -> orders.user_id <- admins.id (PK): dua relasi, satu kolom target.
+function seedTwoParentsToOneCol() {
+  seed(ERD, {
+    tables: [
+      table('users', 'users', [col('users.id', 'id', 'INT', { pk: true })]),
+      table('admins', 'admins', [col('admins.id', 'id', 'INT', { pk: true })]),
+      table('orders', 'orders', [col('orders.user_id', 'user_id', 'INT')]),
+    ],
+  });
+  s().onConnect({
+    source: 'users',
+    sourceHandle: 'users.id',
+    target: 'orders',
+    targetHandle: 'orders.user_id',
+  });
+  s().onConnect({
+    source: 'admins',
+    sourceHandle: 'admins.id',
+    target: 'orders',
+    targetHandle: 'orders.user_id',
+  });
+}
+
 afterEach(restore);
 
 describe('editorStore ERD — table', () => {
@@ -120,6 +143,50 @@ describe('editorStore ERD — column', () => {
     expect(colsOf('orders').map((c) => c.id)).toEqual(['orders.id']);
   });
 
+  it('deleteColumn kolom target membersihkan FK kolom pasangan', () => {
+    seedErd();
+    connectUserToOrder();
+
+    s().deleteColumn('users', 'users.id');
+
+    expect(findCol('users.id')).toBeUndefined();
+    expect(s().relationships).toEqual([]);
+    expect(findCol('orders.user_id').fk).toBe(false);
+  });
+
+  it('deleteColumn kolom source tidak menyentuh FK kolom target relasi lain', () => {
+    seed(ERD, {
+      tables: [
+        table('users', 'users', [
+          col('users.id', 'id', 'INT', { pk: true }),
+          col('users.email', 'email', 'VARCHAR', { pk: true }),
+        ]),
+        table('orders', 'orders', [col('orders.user_id', 'user_id', 'INT')]),
+        table('logs', 'logs', [col('logs.user_id', 'user_id', 'INT')]),
+      ],
+    });
+    s().onConnect({
+      source: 'users',
+      sourceHandle: 'users.id',
+      target: 'orders',
+      targetHandle: 'orders.user_id',
+    });
+    s().onConnect({
+      source: 'users',
+      sourceHandle: 'users.email',
+      target: 'logs',
+      targetHandle: 'logs.user_id',
+    });
+    expect(s().relationships).toHaveLength(2);
+
+    // Hanya relasi ke orders yang ikut terhapus; relasi ke logs tetap hidup.
+    s().deleteColumn('users', 'users.id');
+
+    expect(s().relationships).toHaveLength(1);
+    expect(findCol('orders.user_id').fk).toBe(false);
+    expect(findCol('logs.user_id').fk).toBe(true);
+  });
+
   it('reorderColumns memindahkan kolom ke indeks tujuan', () => {
     seedErd();
     s().addColumn('orders'); // orders: id, user_id, new_column
@@ -180,25 +247,7 @@ describe('editorStore ERD — FK lifecycle', () => {
   });
 
   it('onEdgesChange remove TIDAK membersihkan FK bila masih ada relasi lain ke kolom yang sama', () => {
-    seed(ERD, {
-      tables: [
-        table('users', 'users', [col('users.id', 'id', 'INT', { pk: true })]),
-        table('admins', 'admins', [col('admins.id', 'id', 'INT', { pk: true })]),
-        table('orders', 'orders', [col('orders.user_id', 'user_id', 'INT')]),
-      ],
-    });
-    s().onConnect({
-      source: 'users',
-      sourceHandle: 'users.id',
-      target: 'orders',
-      targetHandle: 'orders.user_id',
-    });
-    s().onConnect({
-      source: 'admins',
-      sourceHandle: 'admins.id',
-      target: 'orders',
-      targetHandle: 'orders.user_id',
-    });
+    seedTwoParentsToOneCol();
     expect(new Set(s().relationships.map((r) => r.id)).size).toBe(2);
 
     s().onEdgesChange([{ id: s().relationships[0].id, type: 'remove' }]);
@@ -207,17 +256,25 @@ describe('editorStore ERD — FK lifecycle', () => {
     expect(findCol('orders.user_id').fk).toBe(true);
   });
 
-  // BUG (belum diperbaiki): `deleteRelationship` hanya memfilter
-  // `relationships` dan tidak membersihkan flag `fk` pada kolom target,
-  // padahal `onEdgesChange` dan `deleteTable` sudah melakukannya.
-  // Ganti ke `it` setelah action-nya memakai logika pembersihan FK yang sama.
-  it.fails('deleteRelationship membersihkan FK kolom target', () => {
+  it('deleteRelationship membersihkan FK kolom target', () => {
     seedErd();
     connectUserToOrder();
     expect(findCol('orders.user_id').fk).toBe(true);
 
     s().deleteRelationship(s().relationships[0].id);
 
+    expect(s().relationships).toEqual([]);
+    expect(findCol('orders.user_id').fk).toBe(false);
+  });
+
+  it('dua relasi ke satu kolom: FK hilang hanya saat relasi terakhir dihapus', () => {
+    seedTwoParentsToOneCol();
+
+    s().deleteRelationship(s().relationships[0].id);
+    expect(s().relationships).toHaveLength(1);
+    expect(findCol('orders.user_id').fk).toBe(true);
+
+    s().deleteRelationship(s().relationships[0].id);
     expect(s().relationships).toEqual([]);
     expect(findCol('orders.user_id').fk).toBe(false);
   });

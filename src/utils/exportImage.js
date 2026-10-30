@@ -1,6 +1,5 @@
 import { getNodesBounds, getViewportForBounds } from "reactflow";
 import { toPng } from "html-to-image";
-import { isErdType } from "../config/diagramTypes";
 
 /**
  * Resolve semua CSS custom properties di SVG menjadi nilai eksplisit.

@@ -44,10 +44,10 @@ describe('kontrak store ↔ komponen', () => {
     return names;
   }
 
-  // BUG (belum diperbaiki): `toggleSidebar` dan `forceSave` dihapus dari
-  // editorStore saat commit f11f168, tapi Toolbar.jsx dan useEditorShortcuts.js
-  // masih memakainya → handler undefined (tombol sidebar, tombol Save, mod+s
-  // mati). Ganti ke `it` setelah action-nya dipulihkan.
+  // Masih gagal: src/hooks/useEditorShortcuts.js memakai `state.forceSave`
+  // yang tidak ada di store (mod+S mati). File itu di luar cakupan refactor
+  // ini dan tidak di-import siapa pun; ganti ke `it` setelah hook dirapikan
+  // atau dihapus.
   it.fails('semua `state.<nama>` yang dipakai komponen ada di editorStore', () => {
     const missing = [];
 
@@ -72,11 +72,9 @@ describe('kontrak store ↔ komponen', () => {
     expect(found).toContain('tables');
   });
 
-  // BUG (belum diperbaiki): Toolbar.jsx kini meng-import `exportToPNG` dari
-  // exportImage.js (ditinggalkan setelah rename ke `exportDiagramAsImage`),
-  // dan exportImage.js meng-import `isErdType` yang tak pernah dipakai.
-  // Ganti ke `it` setelah keduanya dirapikan.
-  it.fails('tidak ada import mati dari utils/', () => {
+  // Kebalikan dari di atas: menangkap import yang tersisa setelah simbol
+  // sumbernya di-rename atau dihapus.
+  it('tidak ada import mati dari utils/', () => {
     const dead = [];
     for (const file of FILES) {
       const src = readFileSync(file, 'utf8');
