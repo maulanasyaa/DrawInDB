@@ -16,8 +16,10 @@ import {
   FiCheck,
   FiCopy,
   FiTrash2,
+  FiSearch,
   FiX as FiClose,
 } from "react-icons/fi";
+import { filterDiagrams } from "../utils/diagramFilter";
 
 const DB_TYPES = [
   { id: "mysql", name: "MySQL" },
@@ -118,6 +120,9 @@ export default function DiagramList() {
   const [renamingFilename, setRenamingFilename] = useState(null);
   const [renameValue, setRenameValue] = useState("");
 
+  // Filter client-side; tidak dipersist.
+  const [search, setSearch] = useState("");
+
   const startRename = (diagram) => {
     setRenamingFilename(diagram.filename);
     setRenameValue(diagram.name);
@@ -174,6 +179,7 @@ export default function DiagramList() {
 
   const diagramType = getDiagramType(type);
   const diagrams = project.diagrams?.filter((d) => d.type === type) || [];
+  const visible = filterDiagrams(diagrams, search);
 
   const confirmDeleteDiagram = async () => {
     const target = deletingDiagram;
@@ -260,9 +266,33 @@ export default function DiagramList() {
         </div>
 
         <div className="z-10 relative">
-          <h2 className="font-display subsection-title text-primary mb-6">
-            Your {diagramType.labelPlural}
-          </h2>
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <h2 className="font-display subsection-title text-primary">
+              Your {diagramType.labelPlural}
+            </h2>
+            <div className="relative shrink-0">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setSearch("")}
+                placeholder="Search diagrams…"
+                aria-label="Search diagrams"
+                className="w-56 bg-base border border-theme rounded-lg pl-9 pr-9 py-2 text-sm text-primary focus:outline-none focus:border-focus transition-all"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-muted hover:text-primary rounded-md"
+                  aria-label="Clear search"
+                  title="Clear search"
+                >
+                  <FiClose className="text-sm" />
+                </button>
+              )}
+            </div>
+          </div>
           {diagrams.length === 0 ? (
             <div className="premium-card p-16 flex items-center justify-center min-h-[200px]">
               <EmptyState
@@ -270,9 +300,16 @@ export default function DiagramList() {
                 description="Start by creating one above."
               />
             </div>
+          ) : visible.length === 0 ? (
+            <div className="premium-card p-16 flex items-center justify-center min-h-[200px]">
+              <EmptyState
+                title="Tidak ada diagram yang cocok"
+                description={`Tidak ada diagram yang cocok dengan "${search}".`}
+              />
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {diagrams.map((diagram) => {
+              {visible.map((diagram) => {
                 const isRenaming = renamingFilename === diagram.filename;
 
                 return (
