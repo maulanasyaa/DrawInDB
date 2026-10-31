@@ -112,11 +112,11 @@ describe('registry invariants', () => {
     }
   });
 
-  it('export SQL hanya ERD, export JSON hanya Use Case, PNG untuk semua kecuali Use Case', () => {
+  it('export SQL hanya ERD, export JSON hanya Use Case, PNG untuk semua tipe', () => {
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.sql).map((t) => t.id)).toEqual(['erd']);
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.json).map((t) => t.id)).toEqual(['usecase']);
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.png).map((t) => t.id).sort()).toEqual(
-      ['architecture', 'erd', 'flowchart', 'sequence', 'statemachine'],
+      ['architecture', 'erd', 'flowchart', 'sequence', 'statemachine', 'usecase'],
     );
   });
 

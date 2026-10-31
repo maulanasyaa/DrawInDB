@@ -40,7 +40,7 @@ export const DIAGRAM_TYPES = {
     icon: FiUsers,
     dataShape: "graph",
     hasDbType: false,
-    exports: { png: false, sql: false, json: true },
+    exports: { png: true, sql: false, json: true },
   },
   statemachine: {
     id: "statemachine",

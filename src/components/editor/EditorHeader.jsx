@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useReactFlow } from "reactflow";
 import { useEditorStore } from "../../store/editorStore";
 import {
   FiArrowLeft,
@@ -22,6 +23,7 @@ export default function EditorHeader() {
   const navigate = useNavigate();
   const { projectId } = useParams();
   const fileInputRef = useRef(null);
+  const { getNodes } = useReactFlow();
 
   const diagramMeta = useEditorStore((state) => state.diagramMeta);
   const isDirty = useEditorStore((state) => state.isDirty);
@@ -102,15 +104,16 @@ export default function EditorHeader() {
         return;
       }
 
-      // ERD menyimpan node di `tables`; tipe graph menyimpannya di `nodes`.
-      const exportNodes = isERD ? tables : nodes;
+      // ERD menyimpan node di `tables`; tipe graph memakai node hasil ukur
+      // React Flow (bukan snapshot render, yang bisa belum punya width/height).
+      const readNodes = () => (isERD ? tables : getNodes());
 
-      if (!exportNodes || exportNodes.length === 0) {
+      if (readNodes().length === 0) {
         alert("Nothing to export — the diagram is empty.");
         return;
       }
 
-      await exportDiagramAsImage(exportNodes, {
+      await exportDiagramAsImage(readNodes, {
         filename: diagramMeta.name || "diagram",
         padding: 48,
         pixelRatio: 2,

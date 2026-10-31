@@ -125,10 +125,64 @@ export function resolveSvgCssVars(rootEl) {
   };
 }
 
+/** Nama file PNG dari nama diagram: spasi jadi underscore, huruf kecil. */
+export function pngFileName(name) {
+  return `${String(name || "diagram").replace(/\s+/g, "_").toLowerCase()}.png`;
+}
+
+/**
+ * Semua node sudah punya ukuran hasil pengukuran React Flow. Array kosong
+ * dianggap siap — guard "diagram kosong" ada di pemanggil.
+ */
+export function nodesMeasured(nodes) {
+  return (nodes || []).every((n) => n.width > 0 && n.height > 0);
+}
+
+/**
+ * Tunggu kanvas siap difoto: node terukur (React Flow menyembunyikan node yang
+ * belum diukur dengan `visibility: hidden`, dan `getNodesBounds` membaca
+ * `node.width/height` hasil ukur) serta marker panah sudah disuntik
+ * (UseCaseMarkers/StateMachineMarkers memakai setTimeout 100 ms).
+ * Berhenti saat siap atau timeout — tidak melempar error.
+ */
+async function waitUntilReady(flowEl, readNodes, timeoutMs = 1500) {
+  const deadline = performance.now() + timeoutMs;
+
+  const markersReady = () => {
+    const edgesSvg = flowEl.querySelector(".react-flow__edges");
+    if (!edgesSvg) return true;
+
+    const referenced = new Set();
+    edgesSvg.querySelectorAll("[marker-start], [marker-end]").forEach((el) => {
+      for (const attr of ["marker-start", "marker-end"]) {
+        const match = (el.getAttribute(attr) || "").match(/url\(#(.+?)\)/);
+        if (match) referenced.add(match[1]);
+      }
+    });
+    if (referenced.size === 0) return true;
+
+    const present = new Set(
+      Array.from(flowEl.querySelectorAll("[id]"), (el) => el.id),
+    );
+    return Array.from(referenced).every((id) => present.has(id));
+  };
+
+  while (performance.now() < deadline) {
+    const hiddenNode = flowEl.querySelector(
+      '.react-flow__node[style*="visibility: hidden"]',
+    );
+    if (!hiddenNode && nodesMeasured(readNodes()) && markersReady()) return;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+}
+
 /**
  * Export React Flow diagram sebagai PNG dengan konten center-aligned.
+ * `nodesOrGetter` boleh array atau fungsi yang mengembalikan array — getter
+ * dipakai EditorHeader supaya bounds dihitung dari node yang sudah diukur,
+ * bukan snapshot render yang basi.
  */
-export async function exportDiagramAsImage(nodes, options = {}) {
+export async function exportDiagramAsImage(nodesOrGetter, options = {}) {
   const {
     filename = "diagram",
     padding = 60,
@@ -138,7 +192,10 @@ export async function exportDiagramAsImage(nodes, options = {}) {
     backgroundColor,
   } = options;
 
-  if (!nodes || nodes.length === 0) {
+  const readNodes =
+    typeof nodesOrGetter === "function" ? nodesOrGetter : () => nodesOrGetter;
+
+  if (!readNodes() || readNodes().length === 0) {
     throw new Error("Cannot export: diagram is empty.");
   }
 
@@ -167,8 +224,14 @@ export async function exportDiagramAsImage(nodes, options = {}) {
     throw new Error("React Flow viewport not found.");
   }
 
+  // Tunggu node terukur & marker tersuntik sebelum membaca bounds.
+  await waitUntilReady(flowEl, readNodes);
+
   // Hitung bounds & ukuran output
-  const nodesBounds = getNodesBounds(nodes);
+  const nodesBounds = getNodesBounds(readNodes());
+  if (nodesBounds.width === 0 || nodesBounds.height === 0) {
+    throw new Error("Diagram is still rendering — try exporting again.");
+  }
   const contentWidth = nodesBounds.width + padding * 2;
   const contentHeight = nodesBounds.height + padding * 2;
   const outputWidth = Math.max(contentWidth, minWidth);
@@ -285,7 +348,7 @@ export async function exportDiagramAsImage(nodes, options = {}) {
 
     // Download
     const link = document.createElement("a");
-    link.download = `${filename.replace(/\s+/g, "_").toLowerCase()}.png`;
+    link.download = pngFileName(filename);
     link.href = dataUrl;
     document.body.appendChild(link);
     link.click();
