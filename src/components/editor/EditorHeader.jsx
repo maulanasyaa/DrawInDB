@@ -10,6 +10,7 @@ import {
   FiImage,
   FiCornerUpLeft,
   FiCornerUpRight,
+  FiCode,
 } from "react-icons/fi";
 import {
   buildUseCaseExport,
@@ -19,7 +20,7 @@ import { exportDiagramAsImage } from "../../utils/exportImage";
 import { getDiagramType, isErdType } from "../../config/diagramTypes";
 import { getEditorConfig } from "../../config/editorTypes.jsx";
 
-export default function EditorHeader() {
+export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPreview }) {
   const navigate = useNavigate();
   const { projectId } = useParams();
   const fileInputRef = useRef(null);
@@ -220,6 +221,22 @@ export default function EditorHeader() {
           >
             <FiImage className="text-sm" />
             <span>Export PNG</span>
+          </button>
+        )}
+
+        {typeConfig.exports.sql && onToggleSqlPreview && (
+          <button
+            onClick={onToggleSqlPreview}
+            aria-pressed={sqlPreviewOpen}
+            className={`flex items-center gap-2 px-3 py-1.5 transition-colors rounded-md text-xs font-semibold ${
+              sqlPreviewOpen
+                ? "text-primary bg-surface-2"
+                : "text-muted hover:text-primary hover:bg-surface-2"
+            }`}
+            title="Toggle SQL preview"
+          >
+            <FiCode className="text-sm" />
+            <span>SQL</span>
           </button>
         )}
 
