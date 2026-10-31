@@ -303,8 +303,8 @@ export default function DiagramList() {
           ) : visible.length === 0 ? (
             <div className="premium-card p-16 flex items-center justify-center min-h-[200px]">
               <EmptyState
-                title="Tidak ada diagram yang cocok"
-                description={`Tidak ada diagram yang cocok dengan "${search}".`}
+                title="No matching diagrams"
+                description={`No diagrams match "${search}".`}
               />
             </div>
           ) : (
