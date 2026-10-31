@@ -2,10 +2,27 @@ import { create } from 'zustand';
 import { createPrdDoc, sanitizeDocFilename, docDisplayName } from '../utils/prd.js';
 import { getDiagramType } from '../config/diagramTypes';
 import { emptySequence } from '../utils/sequence';
+import { copyName, buildDiagramCopy } from '../utils/diagramCopy';
 
 // Electron membungkus error main process: "Error invoking remote method 'x': Error: msg"
 const ipcMessage = (e) =>
   String(e?.message ?? e).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '');
+
+/** Filename diagram unik di folder diagrams/: `<slug>_<type>.json`, suffix `_1`, `_2`, … bila bentrok. */
+async function uniqueFilename(diagramsPath, name, type) {
+  const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  let filename = `${safeName}_${type}.json`;
+  let filePath = await window.api.pathJoin(diagramsPath, filename);
+  let counter = 1;
+
+  while (await window.api.pathExists(filePath)) {
+    filename = `${safeName}_${type}_${counter}.json`;
+    filePath = await window.api.pathJoin(diagramsPath, filename);
+    counter++;
+  }
+
+  return { filename, filePath };
+}
 
 export const useVaultStore = create((set, get) => ({
   currentVault: null, // { path, name, projects: [] }
@@ -411,18 +428,8 @@ export const useVaultStore = create((set, get) => ({
 
     set({ isLoading: true, error: null });
     try {
-      const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      let filename = `${safeName}_${type}.json`;
-      let counter = 1;
-
       const diagramsPath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'diagrams');
-      let filePath = await window.api.pathJoin(diagramsPath, filename);
-
-      while (await window.api.pathExists(filePath)) {
-        filename = `${safeName}_${type}_${counter}.json`;
-        filePath = await window.api.pathJoin(diagramsPath, filename);
-        counter++;
-      }
+      const { filename, filePath } = await uniqueFilename(diagramsPath, name, type);
 
       const newDiagram = {
         version: "1.0",
@@ -478,6 +485,57 @@ export const useVaultStore = create((set, get) => ({
     } catch (error) {
       set({ error: error.message, isLoading: false });
       throw error;
+    }
+  },
+
+  /**
+   * Salin diagram apa adanya (semua tipe, tanpa percabangan) dengan id/filename
+   * baru dan nama "<nama> (salinan)". Riwayat undo tidak ada di file, jadi ikut
+   * hilang dengan sendirinya. Kembalikan filename salinan untuk navigasi.
+   */
+  duplicateDiagram: async (projectId, filename) => {
+    const { currentVault } = get();
+    if (!currentVault) return;
+
+    set({ isLoading: true, error: null });
+    try {
+      const project = currentVault.projects.find(p => p.id === projectId);
+      if (!project) throw new Error('Project not found');
+
+      const diagramsPath = await window.api.pathJoin(currentVault.path, 'projects', projectId, 'diagrams');
+      const source = JSON.parse(await window.api.readFile(await window.api.pathJoin(diagramsPath, filename)));
+
+      const type = source.meta?.type || 'erd';
+      const name = copyName(source.meta?.name || 'Untitled', (project.diagrams || []).map(d => d.name));
+      const copy = buildDiagramCopy(source, { projectId, name });
+      const { filename: newFilename, filePath } = await uniqueFilename(diagramsPath, name, type);
+
+      await window.api.writeFile(filePath, JSON.stringify(copy, null, 2));
+
+      const newDiagramMeta = {
+        filename: newFilename,
+        name: copy.meta.name,
+        type,
+        db_type: copy.meta.db_type,
+        updated_at: copy.meta.updated_at
+      };
+
+      const updatedProjects = currentVault.projects.map(proj => {
+        if (proj.id === projectId) {
+          return { ...proj, diagrams: [newDiagramMeta, ...proj.diagrams] };
+        }
+        return proj;
+      });
+
+      set({
+        currentVault: { ...currentVault, projects: updatedProjects },
+        isLoading: false
+      });
+
+      return newFilename;
+    } catch (error) {
+      set({ error: error.message, isLoading: false });
+      throw new Error(ipcMessage(error));
     }
   },
 

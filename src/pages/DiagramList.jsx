@@ -14,6 +14,7 @@ import {
   FiArrowLeft,
   FiEdit2,
   FiCheck,
+  FiCopy,
   FiTrash2,
   FiX as FiClose,
 } from "react-icons/fi";
@@ -109,6 +110,7 @@ export default function DiagramList() {
   const createDiagram = useVaultStore((state) => state.createDiagram);
   const renameDiagram = useVaultStore((state) => state.renameDiagram);
   const deleteDiagram = useVaultStore((state) => state.deleteDiagram);
+  const duplicateDiagram = useVaultStore((state) => state.duplicateDiagram);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deletingDiagram, setDeletingDiagram] = useState(null);
 
@@ -181,6 +183,16 @@ export default function DiagramList() {
       useToastStore.getState().success(`Deleted "${target.name}"`);
     } catch (err) {
       useToastStore.getState().error(`Failed to delete: ${err.message}`);
+    }
+  };
+
+  const handleDuplicateDiagram = async (diagram) => {
+    try {
+      const filename = await duplicateDiagram(projectId, diagram.filename);
+      useToastStore.getState().success(`Duplicated "${diagram.name}"`);
+      navigate(`/editor/${projectId}/${filename}`);
+    } catch (err) {
+      useToastStore.getState().error(`Failed to duplicate: ${err.message}`);
     }
   };
 
@@ -289,6 +301,17 @@ export default function DiagramList() {
                           aria-label="Rename diagram"
                         >
                           <FiEdit2 className="text-xs" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDuplicateDiagram(diagram);
+                          }}
+                          className="w-7 h-7 flex items-center justify-center text-muted hover:text-primary hover:bg-surface-2 rounded-md"
+                          title="Duplicate diagram"
+                          aria-label="Duplicate diagram"
+                        >
+                          <FiCopy className="text-xs" />
                         </button>
                         <button
                           onClick={(e) => {
