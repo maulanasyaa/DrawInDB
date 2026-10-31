@@ -138,6 +138,9 @@ export const useEditorStore = create((set, get) => ({
 
   _autoSaveTimer: null,
   _pendingSave: null,
+  // Naik tiap `loadDiagram`. Dipakai `cleanup(token)` supaya cleanup dari
+  // mount lama (StrictMode) tidak menghapus konteks simpan load yang baru.
+  _loadToken: 0,
 
   // === HISTORY undo/redo =================================================
   // Snapshot hanya di memori; tidak pernah ditulis ke file diagram.
@@ -273,7 +276,14 @@ export const useEditorStore = create((set, get) => ({
     }
     get().resetHistory();
 
-    set({ isLoading: true, loadError: null, _vaultPath: vaultPath, _projectId: projectId, _filename: filename });
+    set({
+      isLoading: true,
+      loadError: null,
+      _vaultPath: vaultPath,
+      _projectId: projectId,
+      _filename: filename,
+      _loadToken: get()._loadToken + 1,
+    });
     try {
       const filePath = await window.api.pathJoin(vaultPath, 'projects', projectId, 'diagrams', filename);
       const content = await window.api.readFile(filePath);
@@ -989,7 +999,13 @@ export const useEditorStore = create((set, get) => ({
     set({ historyPast: [], historyFuture: [], _historyTimer: null });
   },
 
-  cleanup: () => {
+  /**
+   * `token` = `_loadToken` yang dibaca sinkron saat cleanup dijadwalkan.
+   * Cleanup dari mount lama (sudah ada load lebih baru) diabaikan. Tanpa
+   * argumen, perilaku lama: selalu bersihkan.
+   */
+  cleanup: (token = null) => {
+    if (token !== null && token !== get()._loadToken) return;
     const { _autoSaveTimer } = get();
     if (_autoSaveTimer) {
       clearTimeout(_autoSaveTimer);

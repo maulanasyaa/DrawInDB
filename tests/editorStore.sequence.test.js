@@ -307,6 +307,51 @@ describe('editorStore Sequence — persistensi', () => {
     expect(s().sequenceOptions).toEqual({ showNumbers: false });
   });
 
+  it('cleanup basi (load lama) tidak menghapus konteks simpan', async () => {
+    const files = installFakeFs();
+    const path = `${VAULT}/projects/${PROJ}/diagrams/${FILE}`;
+    files.set(
+      path,
+      JSON.stringify({
+        meta: { type: 'sequence', name: 'Login Flow' },
+        participants: [],
+        messages: [],
+        options: { showNumbers: false },
+      }),
+    );
+
+    reset();
+    await s().loadDiagram(VAULT, PROJ, FILE); // mount 1
+    const stale = s()._loadToken;
+    await s().loadDiagram(VAULT, PROJ, FILE); // mount 2 (StrictMode)
+
+    s().cleanup(stale); // cleanup mount 1 — harus diabaikan
+
+    expect(s()._vaultPath).toBe(VAULT);
+    expect(s()._loadToken).toBe(stale + 1);
+
+    s().addSequenceParticipant();
+    await s().saveDiagram();
+
+    expect(JSON.parse(files.get(path)).participants).toHaveLength(1);
+  });
+
+  it('cleanup dengan token terbaru tetap membersihkan state', async () => {
+    const files = installFakeFs();
+    files.set(
+      `${VAULT}/projects/${PROJ}/diagrams/${FILE}`,
+      JSON.stringify({ meta: { type: 'sequence', name: 'Login Flow' } }),
+    );
+
+    reset();
+    await s().loadDiagram(VAULT, PROJ, FILE);
+    s().cleanup(s()._loadToken);
+
+    expect(s().diagramMeta).toBe(null);
+    expect(s()._vaultPath).toBe(null);
+    expect(s()._pendingSave).toBe(null);
+  });
+
   it('cleanup mengosongkan seluruh state sequence', async () => {
     seedPair();
     s().setSelectedSequenceItem({ type: 'message', id: s().messages[0].id });

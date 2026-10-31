@@ -46,7 +46,11 @@ function EditorContent() {
   useEffect(() => {
     return () => {
       const store = useEditorStore.getState();
-      store.flush().finally(() => useEditorStore.getState().cleanup());
+      // Token dibaca SINKRON: di StrictMode cleanup mount pertama jalan lebih
+      // dulu dari load kedua, dan `.finally` membuat cleanup() menjadi
+      // microtask — tanpa guard, ia menghapus konteks simpan hasil load kedua.
+      const token = store._loadToken;
+      store.flush().finally(() => useEditorStore.getState().cleanup(token));
     };
   }, []);
 
