@@ -6,7 +6,7 @@ export function generateSQL(diagram) {
 
   // 1. Generate tables
   for (const table of diagram.tables) {
-    sql += generateTableSQL(table.data, dbType, diagram.relationships, diagram.tables) + '\n\n';
+    sql += generateTableSQL(table.data, dbType, diagram.relationships, diagram.tables, table.id) + '\n\n';
   }
 
   // 2. Generate Foreign Keys (for non-SQLite)
@@ -20,7 +20,7 @@ export function generateSQL(diagram) {
   return sql.trim() + '\n';
 }
 
-export function generateTableSQL(tableData, dbType, relationships = [], allTables = []) {
+export function generateTableSQL(tableData, dbType, relationships = [], allTables = [], tableId) {
   if (!tableData.columns || tableData.columns.length === 0) {
     return `-- Table ${tableData.name} has no columns`;
   }
@@ -29,16 +29,25 @@ export function generateTableSQL(tableData, dbType, relationships = [], allTable
   let lines = [];
   let primaryKeys = [];
 
+  // Composite PK (lebih dari satu kolom pk) selalu dijadikan constraint
+  // terpisah: PRIMARY KEY inline hanya sah untuk PK tunggal.
+  const singlePk = tableData.columns.filter(c => c.pk).length === 1;
+
   for (const col of tableData.columns) {
     let line = `  ${escapeIdentifier(col.name, dbType)} ${formatType(col.type, dbType)}`;
 
-    if (dbType === 'postgresql' && col.pk && (col.type === 'INTEGER' || col.type === 'BIGINT')) {
+    // PG SERIAL/BIGSERIAL = shorthand PK tunggal (INTEGER/BIGINT PK, atau tipe
+    // SERIAL/BIGSERIAL yang dipilih eksplisit). Sudah inline, jadi tidak boleh
+    // diulang sebagai constraint PRIMARY KEY terpisah.
+    const pgSerial = col.pk && singlePk &&
+      (col.type === 'INTEGER' || col.type === 'BIGINT' || col.type === 'SERIAL' || col.type === 'BIGSERIAL');
+
+    if (dbType === 'postgresql' && pgSerial) {
        // SERIAL shorthand for PG
-       line = `  ${escapeIdentifier(col.name, dbType)} ${col.type === 'BIGINT' ? 'BIGSERIAL' : 'SERIAL'} PRIMARY KEY`;
-       primaryKeys.push(col.name); // Still track, but don't add constraint line
-    } else if (dbType === 'sqlite' && col.pk && col.type === 'INTEGER') {
+       const serialType = col.type === 'BIGINT' || col.type === 'BIGSERIAL' ? 'BIGSERIAL' : 'SERIAL';
+       line = `  ${escapeIdentifier(col.name, dbType)} ${serialType} PRIMARY KEY`;
+    } else if (dbType === 'sqlite' && col.pk && singlePk && col.type === 'INTEGER') {
       line += ' PRIMARY KEY AUTOINCREMENT';
-      primaryKeys.push(col.name);
     } else {
       if (col.notNull || col.pk) line += ' NOT NULL';
       if (col.unique) line += ' UNIQUE';
@@ -49,16 +58,19 @@ export function generateTableSQL(tableData, dbType, relationships = [], allTable
 
     // SQLite Inline Foreign Keys
     if (dbType === 'sqlite') {
-      const inlineFk = getSQLiteInlineFK(tableData, col, relationships, allTables);
+      const inlineFk = getSQLiteInlineFK(tableId, col, relationships, allTables);
       if (inlineFk) {
         line += ` ${inlineFk}`;
       }
     }
 
     lines.push(line);
-    
-    // Track PKs for non-shorthand dialects
-    if (col.pk && !(dbType === 'postgresql' && (col.type === 'INTEGER' || col.type === 'BIGINT')) && !(dbType === 'sqlite' && col.type === 'INTEGER')) {
+
+    // Track PKs only for columns NOT already inlined above
+    const inlined = dbType === 'postgresql' ? pgSerial
+      : dbType === 'sqlite' ? (col.pk && singlePk && col.type === 'INTEGER')
+      : false;
+    if (col.pk && !inlined) {
       primaryKeys.push(col.name);
     }
   }
@@ -133,9 +145,11 @@ function formatType(type, dbType) {
   return t;
 }
 
-function getSQLiteInlineFK(tableData, col, relationships, allTables) {
-  // Find if this column is a target in any relationship
-  const rel = relationships.find(r => r.target === tableData.id && r.targetHandle === col.id); // Assuming target is child
+function getSQLiteInlineFK(tableId, col, relationships, allTables) {
+  if (!tableId) return null;
+
+  // Find if this column is a target in any relationship (target = child side)
+  const rel = relationships.find(r => r.target === tableId && r.targetHandle === col.id);
   if (!rel) return null;
 
   const sourceTable = allTables.find(t => t.id === rel.source);

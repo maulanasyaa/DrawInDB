@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useReactFlow } from "reactflow";
 import { useEditorStore } from "../../store/editorStore";
 import {
   FiArrowLeft,
@@ -7,18 +8,22 @@ import {
   FiDownload,
   FiUpload,
   FiImage,
+  FiCornerUpLeft,
+  FiCornerUpRight,
 } from "react-icons/fi";
 import {
   buildUseCaseExport,
   parseUseCaseImport,
 } from "../../utils/useCaseJson";
 import { exportDiagramAsImage } from "../../utils/exportImage";
-import { getDiagramType } from "../../config/diagramTypes";
+import { getDiagramType, isErdType } from "../../config/diagramTypes";
+import { getEditorConfig } from "../../config/editorTypes.jsx";
 
 export default function EditorHeader() {
   const navigate = useNavigate();
   const { projectId } = useParams();
   const fileInputRef = useRef(null);
+  const { getNodes } = useReactFlow();
 
   const diagramMeta = useEditorStore((state) => state.diagramMeta);
   const isDirty = useEditorStore((state) => state.isDirty);
@@ -30,14 +35,19 @@ export default function EditorHeader() {
   const replaceUseCaseGraph = useEditorStore(
     (state) => state.replaceUseCaseGraph,
   );
+  const undo = useEditorStore((state) => state.undo);
+  const redo = useEditorStore((state) => state.redo);
+  const historyPast = useEditorStore((state) => state.historyPast);
+  const historyFuture = useEditorStore((state) => state.historyFuture);
+  const canUndo = historyPast.length > 0;
+  const canRedo = historyFuture.length > 0;
 
   if (!diagramMeta) return null;
 
   const type = diagramMeta.type;
-  const isERD = type === "erd";
-  const isUseCase = type === "usecase";
-  const isFlowchart = type === "flowchart";
   const typeConfig = getDiagramType(type);
+  const editorConfig = getEditorConfig(type);
+  const isERD = isErdType(type);
   const badgeText = typeConfig.badge;
   const backLabel = typeConfig.backLabel;
 
@@ -87,15 +97,23 @@ export default function EditorHeader() {
 
   const handleExportImage = async () => {
     try {
-      // Untuk ERD, node-nya di `tables`. Untuk flowchart & usecase, di `nodes`.
-      const exportNodes = type === "erd" ? tables : nodes;
+      // Tipe dengan kanvas sendiri (sequence) mengekspor SVG-nya langsung.
+      // Dicek SEBELUM guard kosong: sequence tidak punya `nodes` sama sekali.
+      if (editorConfig.exportPng) {
+        await editorConfig.exportPng({ filename: diagramMeta.name || "diagram" });
+        return;
+      }
 
-      if (!exportNodes || exportNodes.length === 0) {
+      // ERD menyimpan node di `tables`; tipe graph memakai node hasil ukur
+      // React Flow (bukan snapshot render, yang bisa belum punya width/height).
+      const readNodes = () => (isERD ? tables : getNodes());
+
+      if (readNodes().length === 0) {
         alert("Nothing to export — the diagram is empty.");
         return;
       }
 
-      await exportDiagramAsImage(exportNodes, {
+      await exportDiagramAsImage(readNodes, {
         filename: diagramMeta.name || "diagram",
         padding: 48,
         pixelRatio: 2,
@@ -157,6 +175,35 @@ export default function EditorHeader() {
       </div>
 
       <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            className={`p-1.5 rounded-md transition-colors ${
+              canUndo
+                ? "text-muted hover:text-primary hover:bg-surface-2"
+                : "text-muted opacity-40 cursor-not-allowed"
+            }`}
+            title="Undo (Ctrl/Cmd+Z)"
+            aria-label="Undo"
+          >
+            <FiCornerUpLeft className="text-sm" />
+          </button>
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            className={`p-1.5 rounded-md transition-colors ${
+              canRedo
+                ? "text-muted hover:text-primary hover:bg-surface-2"
+                : "text-muted opacity-40 cursor-not-allowed"
+            }`}
+            title="Redo (Ctrl/Cmd+Shift+Z, Ctrl+Y)"
+            aria-label="Redo"
+          >
+            <FiCornerUpRight className="text-sm" />
+          </button>
+        </div>
+
         {isDirty && (
           <span className="text-[10px] font-medium text-warning animate-pulse select-none">
             Unsaved changes

@@ -1,48 +1,38 @@
-import { useEffect } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useEditorStore } from '../store/editorStore';
 
-export function useEditorShortcuts({ onToggleSidebar, onEscape }) {
-  const forceSave = useEditorStore(state => state.forceSave);
-  const addTable = useEditorStore(state => state.addTable);
-  const deleteTable = useEditorStore(state => state.deleteTable);
-  const duplicateTable = useEditorStore(state => state.duplicateTable);
-  const selectedTableId = useEditorStore(state => state.selectedTableId);
+/**
+ * Shortcut editor diagram.
+ * - Cmd/Ctrl+Z : undo
+ * - Cmd/Ctrl+Shift+Z dan Ctrl+Y : redo
+ * - Cmd/Ctrl+S : simpan sekarang (flush autosave 1500 ms)
+ *
+ * Undo/redo memakai `enableOnFormTags: false` (default) supaya undo native
+ * browser di dalam input tetap jalan. Cmd+S justru harus hidup saat fokus di
+ * input — kalau tidak, menyimpan tepat setelah mengetik label tidak melakukan
+ * apa pun.
+ */
+export function useEditorShortcuts() {
+  const undo = useEditorStore((state) => state.undo);
+  const redo = useEditorStore((state) => state.redo);
+  const flush = useEditorStore((state) => state.flush);
 
-  // Save
-  useHotkeys('mod+s', (e) => {
+  useHotkeys('mod+z, ctrl+z', (e) => {
     e.preventDefault();
-    forceSave();
-  }, { enableOnFormTags: true });
-
-  // Sidebar toggle
-  useHotkeys('mod+\\', (e) => {
-    e.preventDefault();
-    if (onToggleSidebar) onToggleSidebar();
+    undo();
   });
 
-  // Duplicate Table
-  useHotkeys('mod+d', (e) => {
+  useHotkeys('mod+shift+z, ctrl+shift+z, ctrl+y', (e) => {
     e.preventDefault();
-    if (selectedTableId) duplicateTable(selectedTableId);
-  }, [selectedTableId]);
+    redo();
+  });
 
-  // Delete Table
-  useHotkeys('delete, backspace', (e) => {
-    // Only if not focused on an input
-    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'TEXTAREA') {
-      if (selectedTableId) {
-        e.preventDefault();
-        deleteTable(selectedTableId);
-      }
-    }
-  }, [selectedTableId]);
-
-  // Escape (Deselect)
-  useHotkeys('esc', () => {
-    if (onEscape) onEscape();
-  }, { enableOnFormTags: true });
-
-  // Note: Undo/Redo are complex in Zustand without middleware, skipping for MVP shortcut bindings.
-  // Zoom shortcuts are typically handled by React Flow natively, but we can bind them if needed.
+  useHotkeys(
+    'mod+s, ctrl+s',
+    (e) => {
+      e.preventDefault();
+      flush();
+    },
+    { enableOnFormTags: ['input', 'textarea', 'select'] },
+  );
 }

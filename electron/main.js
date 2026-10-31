@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const setupMenu = require('./menu');
+const { assertSafeToTrash } = require('./pathGuard');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
@@ -177,6 +178,21 @@ if (!gotTheLock) {
   ipcMain.handle('fs:deleteFile', async (event, filePath) => {
     assertVaultAccess(filePath);
     await fs.promises.unlink(filePath);
+    return true;
+  });
+
+  ipcMain.handle('fs:deleteDirectory', async (event, dirPath) => {
+    assertVaultAccess(dirPath);
+    await fs.promises.rm(dirPath, { recursive: true, force: true });
+    return true;
+  });
+
+  // Hapus yang bisa dipulihkan: hanya projects/<id>/..., divalidasi leksikal
+  // dan realpath (symlink tidak boleh keluar project). Vault root diambil dari
+  // state main process, bukan dari renderer.
+  ipcMain.handle('fs:trashPath', async (event, targetPath) => {
+    await assertSafeToTrash(currentVaultPath, targetPath);
+    await shell.trashItem(path.resolve(targetPath));
     return true;
   });
 

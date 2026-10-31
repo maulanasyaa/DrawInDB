@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import Editor from "./pages/Editor";
 import ProjectDetail from "./pages/ProjectDetail";
 import DiagramList from "./pages/DiagramList";
+import DocEditor from "./pages/DocEditor";
 import ToastContainer from "./components/Toast";
 import { useVaultStore } from "./store/vaultStore";
 import { useEditorStore } from "./store/editorStore";
@@ -126,6 +127,24 @@ function AnimatedRoutes() {
               className="h-screen w-full"
             >
               <Editor />
+            </motion.div>
+          }
+        />
+
+        {/* Rute 5: Dokumen PRD (bukan tipe diagram). Empat segmen, jadi tidak
+            bertabrakan dengan /project/:projectId/:type di atas. */}
+        <Route
+          path="/project/:projectId/doc/:filename"
+          element={
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              style={{ translateZ: 0, willChange: "opacity" }}
+              className="h-screen w-full"
+            >
+              <DocEditor />
             </motion.div>
           }
         />

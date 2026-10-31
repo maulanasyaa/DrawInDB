@@ -4,7 +4,9 @@ import { DateTime } from "luxon";
 import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useVaultStore } from "../store/vaultStore";
+import { useToastStore } from "../store/toastStore";
 import EmptyState from "../components/EmptyState";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { getDiagramType, DIAGRAM_TYPES } from "../config/diagramTypes";
 import {
   FiArrowRight,
@@ -12,8 +14,12 @@ import {
   FiArrowLeft,
   FiEdit2,
   FiCheck,
+  FiCopy,
+  FiTrash2,
+  FiSearch,
   FiX as FiClose,
 } from "react-icons/fi";
+import { filterDiagrams } from "../utils/diagramFilter";
 
 const DB_TYPES = [
   { id: "mysql", name: "MySQL" },
@@ -105,11 +111,17 @@ export default function DiagramList() {
   const currentVault = useVaultStore((state) => state.currentVault);
   const createDiagram = useVaultStore((state) => state.createDiagram);
   const renameDiagram = useVaultStore((state) => state.renameDiagram);
+  const deleteDiagram = useVaultStore((state) => state.deleteDiagram);
+  const duplicateDiagram = useVaultStore((state) => state.duplicateDiagram);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [deletingDiagram, setDeletingDiagram] = useState(null);
 
   // State untuk rename inline
   const [renamingFilename, setRenamingFilename] = useState(null);
   const [renameValue, setRenameValue] = useState("");
+
+  // Filter client-side; tidak dipersist.
+  const [search, setSearch] = useState("");
 
   const startRename = (diagram) => {
     setRenamingFilename(diagram.filename);
@@ -167,6 +179,28 @@ export default function DiagramList() {
 
   const diagramType = getDiagramType(type);
   const diagrams = project.diagrams?.filter((d) => d.type === type) || [];
+  const visible = filterDiagrams(diagrams, search);
+
+  const confirmDeleteDiagram = async () => {
+    const target = deletingDiagram;
+    setDeletingDiagram(null);
+    try {
+      await deleteDiagram(projectId, target.filename);
+      useToastStore.getState().success(`Deleted "${target.name}"`);
+    } catch (err) {
+      useToastStore.getState().error(`Failed to delete: ${err.message}`);
+    }
+  };
+
+  const handleDuplicateDiagram = async (diagram) => {
+    try {
+      const filename = await duplicateDiagram(projectId, diagram.filename);
+      useToastStore.getState().success(`Duplicated "${diagram.name}"`);
+      navigate(`/editor/${projectId}/${filename}`);
+    } catch (err) {
+      useToastStore.getState().error(`Failed to duplicate: ${err.message}`);
+    }
+  };
 
   const handleCreateDiagram = async (name, dbType) => {
     try {
@@ -232,9 +266,33 @@ export default function DiagramList() {
         </div>
 
         <div className="z-10 relative">
-          <h2 className="font-display subsection-title text-primary mb-6">
-            Your {diagramType.labelPlural}
-          </h2>
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <h2 className="font-display subsection-title text-primary">
+              Your {diagramType.labelPlural}
+            </h2>
+            <div className="relative shrink-0">
+              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setSearch("")}
+                placeholder="Search diagrams…"
+                aria-label="Search diagrams"
+                className="w-56 bg-base border border-theme rounded-lg pl-9 pr-9 py-2 text-sm text-primary focus:outline-none focus:border-focus transition-all"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-muted hover:text-primary rounded-md"
+                  aria-label="Clear search"
+                  title="Clear search"
+                >
+                  <FiClose className="text-sm" />
+                </button>
+              )}
+            </div>
+          </div>
           {diagrams.length === 0 ? (
             <div className="premium-card p-16 flex items-center justify-center min-h-[200px]">
               <EmptyState
@@ -242,9 +300,16 @@ export default function DiagramList() {
                 description="Start by creating one above."
               />
             </div>
+          ) : visible.length === 0 ? (
+            <div className="premium-card p-16 flex items-center justify-center min-h-[200px]">
+              <EmptyState
+                title="No matching diagrams"
+                description={`No diagrams match "${search}".`}
+              />
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {diagrams.map((diagram) => {
+              {visible.map((diagram) => {
                 const isRenaming = renamingFilename === diagram.filename;
 
                 return (
@@ -260,18 +325,43 @@ export default function DiagramList() {
                         : "cursor-pointer"
                     }`}
                   >
-                    {/* Tombol Edit — muncul saat hover, hanya kalau tidak sedang rename */}
+                    {/* Aksi kartu — muncul saat hover, hanya kalau tidak sedang rename */}
                     {!isRenaming && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startRename(diagram);
-                        }}
-                        className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-muted hover:text-primary hover:bg-surface-2 rounded-md opacity-0 group-hover:opacity-100 transition-all z-10"
-                        title="Rename diagram"
-                      >
-                        <FiEdit2 className="text-xs" />
-                      </button>
+                      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all z-10">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startRename(diagram);
+                          }}
+                          className="w-7 h-7 flex items-center justify-center text-muted hover:text-primary hover:bg-surface-2 rounded-md"
+                          title="Rename diagram"
+                          aria-label="Rename diagram"
+                        >
+                          <FiEdit2 className="text-xs" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDuplicateDiagram(diagram);
+                          }}
+                          className="w-7 h-7 flex items-center justify-center text-muted hover:text-primary hover:bg-surface-2 rounded-md"
+                          title="Duplicate diagram"
+                          aria-label="Duplicate diagram"
+                        >
+                          <FiCopy className="text-xs" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingDiagram(diagram);
+                          }}
+                          className="w-7 h-7 flex items-center justify-center text-muted hover:text-danger hover:bg-danger/10 rounded-md"
+                          title="Delete diagram"
+                          aria-label="Delete diagram"
+                        >
+                          <FiTrash2 className="text-xs" />
+                        </button>
+                      </div>
                     )}
 
                     <div>
@@ -340,6 +430,16 @@ export default function DiagramList() {
           type={type}
           onClose={() => setIsModalOpen(false)}
           onCreate={handleCreateDiagram}
+        />
+      )}
+
+      {deletingDiagram && (
+        <ConfirmDialog
+          title="Delete Diagram"
+          message={`Move "${deletingDiagram.name}" to the Trash? You can restore it from your OS Trash.`}
+          confirmLabel="Delete"
+          onConfirm={confirmDeleteDiagram}
+          onCancel={() => setDeletingDiagram(null)}
         />
       )}
     </div>

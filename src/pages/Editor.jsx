@@ -1,77 +1,37 @@
-import React, { useEffect, useCallback, useRef } from "react";
+import React, { useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { FiInfo } from "react-icons/fi";
-import ReactFlow, {
-  ReactFlowProvider,
-  Background,
-  Controls,
-  useReactFlow,
-} from "reactflow";
+import { ReactFlowProvider } from "reactflow";
 import "reactflow/dist/style.css";
 import { AnimatePresence } from "framer-motion";
 
 import { useVaultStore } from "../store/vaultStore";
 import { useEditorStore } from "../store/editorStore";
-import { isGraphType } from "../config/diagramTypes";
+import { getEditorConfig } from "../config/editorTypes.jsx";
 
 import EditorHeader from "../components/editor/EditorHeader";
-import Sidebar from "../components/editor/Sidebar";
-import FlowchartSidebar from "../components/editor/FlowchartSidebar";
-import UseCaseSidebar from "../components/editor/UseCaseSidebar";
-import TableNode from "../components/editor/TableNode";
-import FlowchartNode from "../components/editor/FlowchartNode";
-import UseCaseNode from "../components/editor/UseCaseNode";
-import UseCaseEdge from "../components/editor/UseCaseEdge";
+import ReactFlowCanvas from "../components/editor/ReactFlowCanvas";
 import LoadingSpinner from "../components/LoadingSpinner";
-
-import UseCaseMarkers from "../components/editor/UseCaseMarkers";
-
-const nodeTypes = {
-  table: TableNode,
-  flowchart: FlowchartNode,
-  usecase: UseCaseNode,
-};
-
-const edgeTypes = {
-  usecase: UseCaseEdge,
-};
+import { useEditorShortcuts } from "../hooks/useEditorShortcuts";
 
 function EditorContent() {
-  const reactFlowWrapper = useRef(null);
   const { projectId, filename } = useParams();
   const navigate = useNavigate();
-  const { project } = useReactFlow();
+
+  useEditorShortcuts();
 
   const vaultPath = useVaultStore((state) => state.currentVault?.path);
 
   const loadDiagram = useEditorStore((state) => state.loadDiagram);
   const isLoading = useEditorStore((state) => state.isLoading);
   const diagramMeta = useEditorStore((state) => state.diagramMeta);
-
-  const tables = useEditorStore((state) => state.tables);
-  const relationships = useEditorStore((state) => state.relationships);
-  const nodes = useEditorStore((state) => state.nodes);
-  const flowEdges = useEditorStore((state) => state.flowEdges);
-
-  const canvasState = useEditorStore((state) => state.canvasState);
   const isSidebarOpen = useEditorStore((state) => state.isSidebarOpen);
 
-  const onNodesChange = useEditorStore((state) => state.onNodesChange);
-  const onEdgesChange = useEditorStore((state) => state.onEdgesChange);
-  const onConnect = useEditorStore((state) => state.onConnect);
-  const addTable = useEditorStore((state) => state.addTable);
-  const addFlowNode = useEditorStore((state) => state.addFlowNode);
-  const addUseCaseNode = useEditorStore((state) => state.addUseCaseNode);
-  const updateCanvas = useEditorStore((state) => state.updateCanvas);
-
-  const setSelectedTable = useEditorStore((state) => state.setSelectedTable);
-
-  const diagramType = diagramMeta?.type;
-  const isFlowchart = diagramType === "flowchart";
-  const isUseCase = diagramType === "usecase";
-  const isNodeBased = isGraphType(diagramType);
-
-  const cleanup = useEditorStore((state) => state.cleanup);
+  const editorConfig = getEditorConfig(diagramMeta?.type);
+  const EditorSidebar = editorConfig.sidebar;
+  const EditorOverlay = editorConfig.overlays;
+  // Tipe dengan kanvas sendiri (sequence) menyediakan komponen `canvas`;
+  // lima tipe lain tetap memakai React Flow. Tidak ada cek nama tipe di sini.
+  const Canvas = editorConfig.canvas;
 
   useEffect(() => {
     if (!vaultPath) {
@@ -81,57 +41,18 @@ function EditorContent() {
     loadDiagram(vaultPath, projectId, filename);
   }, [vaultPath, projectId, filename, navigate, loadDiagram]);
 
-  // Cleanup on unmount or before loading new diagram
+  // Cleanup on unmount or before loading new diagram. Perubahan <1500 ms
+  // disimpan dulu (flush), bukan dibuang bersama timer autosave.
   useEffect(() => {
     return () => {
-      cleanup();
+      const store = useEditorStore.getState();
+      // Token dibaca SINKRON: di StrictMode cleanup mount pertama jalan lebih
+      // dulu dari load kedua, dan `.finally` membuat cleanup() menjadi
+      // microtask — tanpa guard, ia menghapus konteks simpan hasil load kedua.
+      const token = store._loadToken;
+      store.flush().finally(() => useEditorStore.getState().cleanup(token));
     };
-  }, [cleanup]);
-
-  const onDragOver = useCallback((event) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
   }, []);
-
-  const onDrop = useCallback(
-    (event) => {
-      event.preventDefault();
-      const type = event.dataTransfer.getData("application/reactflow");
-      if (typeof type === "undefined" || !type) return;
-
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
-      const position = project({
-        x: event.clientX - reactFlowBounds.left,
-        y: event.clientY - reactFlowBounds.top,
-      });
-
-      if (isUseCase) {
-        addUseCaseNode(type, position);
-      } else if (isFlowchart) {
-        addFlowNode(type, position);
-      } else {
-        if (type === "table") {
-          addTable(position);
-        }
-      }
-    },
-    [project, addTable, addFlowNode, addUseCaseNode, isFlowchart, isUseCase],
-  );
-
-  const onNodeClick = useCallback(
-    (_, node) => {
-      if (!isNodeBased) {
-        setSelectedTable(node.id);
-      }
-    },
-    [setSelectedTable, isNodeBased],
-  );
-
-  const onPaneClick = useCallback(() => {
-    if (!isNodeBased) {
-      setSelectedTable(null);
-    }
-  }, [setSelectedTable, isNodeBased]);
 
   if (isLoading) {
     return (
@@ -141,82 +62,28 @@ function EditorContent() {
     );
   }
 
-  const renderSidebar = () => {
-    if (!isSidebarOpen) return null;
-    if (isUseCase) return <UseCaseSidebar key="usecase-sidebar" />;
-    if (isFlowchart) return <FlowchartSidebar key="flowchart-sidebar" />;
-    return <Sidebar key="erd-sidebar" />;
-  };
+  // AnimatePresence tidak boleh menerima anak `null`: `PopChildMeasure`
+  // melempar "Element type is invalid ... got: null". Tipe tanpa sidebar
+  // (config `sidebar` kosong) cukup tidak merender AnimatePresence sama sekali.
+  const renderSidebar = () =>
+    isSidebarOpen && EditorSidebar ? (
+      <AnimatePresence>
+        <EditorSidebar />
+      </AnimatePresence>
+    ) : null;
 
   return (
     <div className="flex flex-col h-screen w-full bg-canvas text-primary overflow-hidden relative">
       <EditorHeader />
 
-      <div className="flex-1 relative flex" ref={reactFlowWrapper}>
-        <AnimatePresence>{renderSidebar()}</AnimatePresence>
+      <div className="flex-1 relative flex">
+        {renderSidebar()}
 
-        {isUseCase && <UseCaseMarkers />}
+        {EditorOverlay && <EditorOverlay />}
 
-        {isFlowchart && (
-          <div className="absolute bottom-6 left-150 -translate-x-1/2 z-40 bg-surface border border-theme px-5 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs text-secondary animate-fade-in pointer-events-none">
-            <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-accent">
-              <FiInfo className="text-sm" />
-            </div>
-            <span>
-              <strong className="text-primary font-medium">Tips:</strong> Drag
-              the line from the <strong>Right/Bottom</strong> (Source) to the{" "}
-              <strong>Left/Top</strong> (Target).
-            </span>
-          </div>
-        )}
+        {editorConfig.tips}
 
-        {isUseCase && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-theme px-5 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs text-secondary animate-fade-in pointer-events-none max-w-[560px]">
-            <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-accent">
-              <FiInfo className="text-sm" />
-            </div>
-            <span>
-              <strong className="text-primary font-medium">Tips:</strong> Pick a
-              relationship type in the sidebar, then drag from a node handle to
-              another node.
-            </span>
-          </div>
-        )}
-
-        <ReactFlow
-          nodes={isNodeBased ? nodes : tables}
-          edges={isNodeBased ? flowEdges : relationships}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodeClick={onNodeClick}
-          onPaneClick={onPaneClick}
-          defaultEdgeOptions={
-            isUseCase ? { type: "usecase" } : { type: "smoothstep" }
-          }
-          onInit={(instance) => {
-            instance.setViewport({
-              x: canvasState.x || 0,
-              y: canvasState.y || 0,
-              zoom: canvasState.zoom || 1,
-            });
-          }}
-          onMoveEnd={(event, viewport) => {
-            updateCanvas(viewport);
-          }}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          minZoom={0.1}
-          maxZoom={2}
-          snapToGrid
-          snapGrid={[12, 12]}
-          className="bg-canvas"
-        >
-          <Background color="#555" gap={24} size={1} />
-          <Controls className="!bg-surface !border-theme !fill-primary !text-primary shadow-lg" />
-        </ReactFlow>
+        {Canvas ? <Canvas /> : <ReactFlowCanvas editorConfig={editorConfig} />}
       </div>
     </div>
   );

@@ -1,13 +1,114 @@
 import { create } from 'zustand';
-import { applyNodeChanges, applyEdgeChanges, addEdge } from 'reactflow';
+import { applyNodeChanges, applyEdgeChanges } from 'reactflow';
 import {
   USECASE_NODE_TYPES,
   USECASE_REL_TYPES,
   USECASE_DEFAULT_SIZES,
   USECASE_DEFAULT_LABELS,
 } from '../config/useCaseTypes';
-import { isGraphType } from '../config/diagramTypes';
+import {
+  SM_NODE_TYPES,
+  SM_DEFAULT_SIZES,
+  SM_DEFAULT_LABELS,
+} from '../config/stateMachineTypes';
+import {
+  ARCH_NODE_TYPES,
+  ARCH_DEFAULT_SIZES,
+  ARCH_DEFAULT_LABELS,
+  ARCH_DEFAULT_FIELDS,
+} from '../config/architectureTypes';
+import {
+  SQ_DEFAULT_PARTICIPANT_KIND,
+  SQ_DEFAULT_MESSAGE_KIND,
+  SQ_DEFAULT_PARTICIPANT_NAME,
+  SQ_DEFAULT_MESSAGE_LABEL,
+  SQ_MESSAGE_KINDS,
+} from '../config/sequenceTypes';
+import { normalizeSequence, pickMessageEndpoints } from '../utils/sequence';
+import { getDiagramType, isGraphType } from '../config/diagramTypes';
+import { CONNECT_STRATEGIES } from '../config/connectStrategies';
+import { ARCH_BOUNDARY_Z, ARCH_EDGE_Z } from '../utils/architectureEdgeLayout';
 import { useToastStore } from './toastStore';
+
+/** Id tipe diagram Architecture (registry `diagramTypes.js`). */
+const ARCH_TYPE_ID = 'architecture';
+
+/**
+ * Migrasi non-breaking layer Architecture saat load:
+ *  • node boundary tanpa `zIndex` → `ARCH_BOUNDARY_Z` (file lama belum punya);
+ *  • node boundary tanpa `style.pointerEvents` → `'none'` (klik badan harus
+ *    meneruskan ke edge; header/tepi/handle/resizer tetap `auto`);
+ *  • edge tanpa `zIndex` → `ARCH_EDGE_Z` (edge di atas node, termasuk boundary).
+ * Hanya menambah field opsional; field lain tidak berubah. File tetap bisa
+ * dibuka versi lama (field tak dikenal diabaikan React Flow).
+ */
+export function migrateArchLayer(nodes = [], edges = []) {
+  return {
+    nodes: nodes.map((n) => {
+      if (n?.data?.type !== ARCH_NODE_TYPES.BOUNDARY) return n;
+      const patched = { ...n };
+      if (typeof patched.zIndex !== 'number') patched.zIndex = ARCH_BOUNDARY_Z;
+      const { width, height } = patched.style || {};
+      if (patched.style?.pointerEvents !== 'none') {
+        patched.style = { width, height, ...patched.style, pointerEvents: 'none' };
+      }
+      return patched;
+    }),
+    edges: edges.map((e) => (typeof e.zIndex === 'number' ? e : { ...e, zIndex: ARCH_EDGE_Z })),
+  };
+}
+
+/**
+ * Bersihkan flag `fk` pada kolom yang tadinya jadi target relasi yang dihapus.
+ * Aturan: `fk` hilang HANYA jika tidak ada relasi sisa yang menargetkan kolom
+ * yang sama. Tabel yang tidak berubah mempertahankan identitas objeknya.
+ */
+function clearOrphanFk(tables, removedRels, remainingRels) {
+  return tables.map((t) => {
+    let changed = false;
+    const columns = t.data.columns.map((col) => {
+      const wasTarget = removedRels.some((r) => r.target === t.id && r.targetHandle === col.id);
+      if (!wasTarget || !col.fk) return col;
+      if (remainingRels.some((r) => r.target === t.id && r.targetHandle === col.id)) return col;
+      changed = true;
+      return { ...col, fk: false };
+    });
+    return changed ? { ...t, data: { ...t.data, columns } } : t;
+  });
+}
+
+/** Batas entri per stack history. */
+const HISTORY_LIMIT = 100;
+/** Jendela penggabungan ketikan (satu snapshot per burst). */
+const HISTORY_TYPING_MS = 500;
+
+/** Snapshot data diagram saja — selection, viewport, dan meta tidak ikut. */
+function captureSnapshot(s) {
+  return {
+    tables: s.tables,
+    relationships: s.relationships,
+    nodes: s.nodes,
+    flowEdges: s.flowEdges,
+    participants: s.participants,
+    messages: s.messages,
+  };
+}
+
+/** Dorong snapshot ke stack; stack lama dipotong dari depan. */
+function pushStack(stack, snap) {
+  const next = [...stack, snap];
+  return next.length > HISTORY_LIMIT ? next.slice(next.length - HISTORY_LIMIT) : next;
+}
+
+/**
+ * Snapshot awal burst ketikan yang masih menggantung. Null bila tidak ada
+ * burst aktif. Disimpan sebagai variabel modul (bukan state) supaya perubahan
+ * internal tidak memicu render.
+ */
+let _burstSnapshot = null;
+
+/** True selama satu gestur drag node berjalan (satu entri history per drag). */
+let _dragInProgress = false;
 
 export const useEditorStore = create((set, get) => ({
   diagramMeta: null,
@@ -17,6 +118,12 @@ export const useEditorStore = create((set, get) => ({
   flowEdges: [],
   canvasState: { x: 0, y: 0, zoom: 1 },
   selectedTableId: null,
+  // Sequence (dataShape 'sequence'): model berurutan, bukan node/edge.
+  // `sequenceOptions` + seleksi sengaja di luar history.
+  participants: [],
+  messages: [],
+  sequenceOptions: { showNumbers: false },
+  selectedSequenceItem: null,
   isSidebarOpen: true,
   isDirty: false,
   isLoading: true,
@@ -31,6 +138,106 @@ export const useEditorStore = create((set, get) => ({
 
   _autoSaveTimer: null,
   _pendingSave: null,
+  // Naik tiap `loadDiagram`. Dipakai `cleanup(token)` supaya cleanup dari
+  // mount lama (StrictMode) tidak menghapus konteks simpan load yang baru.
+  _loadToken: 0,
+
+  // === HISTORY undo/redo =================================================
+  // Snapshot hanya di memori; tidak pernah ditulis ke file diagram.
+  historyPast: [],
+  historyFuture: [],
+  _historyTimer: null,
+
+  canUndo: () => get().historyPast.length > 0,
+  canRedo: () => get().historyFuture.length > 0,
+
+  /**
+   * Catat state SEBELUM mutasi masuk history.
+   * - 'action': satu snapshot langsung (add/delete/connect/reorder/resize).
+   * - 'typing': digabung dalam burst 500 ms (satu snapshot per burst).
+   * - 'flush' : tutup burst yang menggantung sekarang.
+   * `flush` selalu mengosongkan stack future (aksi baru membatalkan redo).
+   */
+  commitHistory: (mode = 'action') => {
+    const { _historyTimer } = get();
+    if (_historyTimer) {
+      clearTimeout(_historyTimer);
+      set({ _historyTimer: null });
+    }
+    if (mode === 'flush') {
+      // Burst menggantung: snapshot awal burst (bukan state sekarang) yang
+      // harus masuk stack, supaya undo buru-buru tetap mengembalikan sebelum
+      // burst dimulai. Tanpa burst, tidak ada yang dicatat.
+      if (!_burstSnapshot) return;
+      const pending = _burstSnapshot;
+      _burstSnapshot = null;
+      set((state) => ({
+        historyPast: pushStack(state.historyPast, pending),
+        historyFuture: [],
+      }));
+      return;
+    }
+    if (mode === 'typing') {
+      // Satu burst = satu entri. Snapshot diambil dari state SEBELUM ketikan
+      // pertama burst; commit berikutnya dalam jendela 500 ms hanya
+      // memperpanjang timer.
+      const snap = _burstSnapshot ?? captureSnapshot(get());
+      _burstSnapshot = snap;
+      set({ _historyTimer: setTimeout(() => {
+        _burstSnapshot = null;
+        set((state) => ({ historyPast: pushStack(state.historyPast, snap), historyFuture: [] }));
+        set({ _historyTimer: null });
+      }, HISTORY_TYPING_MS) });
+      return;
+    }
+    // Mode 'action': satu entri per aksi.
+    set((state) => ({ historyPast: pushStack(state.historyPast, captureSnapshot(state)), historyFuture: [] }));
+  },
+
+  _restoreSnapshot: (snap) => {
+    // Undo/redo membatalkan gestur drag yang sedang berjalan.
+    _dragInProgress = false;
+    set({
+      tables: snap.tables,
+      relationships: snap.relationships,
+      nodes: snap.nodes,
+      flowEdges: snap.flowEdges,
+      // Snapshot lama (sebelum tipe sequence) tidak punya kunci ini.
+      participants: snap.participants ?? [],
+      messages: snap.messages ?? [],
+    });
+    const { _vaultPath, _projectId, _filename } = get();
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  undo: () => {
+    // Ketikan yang belum jatuh tempo harus jadi entri dulu, kalau tidak undo
+    // pertama hanya mengulang keadaan terkini.
+    if (get()._historyTimer) get().commitHistory('flush');
+    const { historyPast } = get();
+    if (historyPast.length === 0) return;
+    const target = historyPast[historyPast.length - 1];
+    const current = captureSnapshot(get());
+    set((state) => ({
+      historyPast: state.historyPast.slice(0, -1),
+      historyFuture: pushStack(state.historyFuture, current),
+    }));
+    get()._restoreSnapshot(target);
+  },
+
+  redo: () => {
+    if (get()._historyTimer) get().commitHistory('flush');
+    const { historyFuture } = get();
+    if (historyFuture.length === 0) return;
+    const target = historyFuture[historyFuture.length - 1];
+    const current = captureSnapshot(get());
+    set((state) => ({
+      historyFuture: state.historyFuture.slice(0, -1),
+      historyPast: pushStack(state.historyPast, current),
+    }));
+    get()._restoreSnapshot(target);
+  },
 
   autoSave: () => {
     if (get()._autoSaveTimer) clearTimeout(get()._autoSaveTimer);
@@ -38,6 +245,15 @@ export const useEditorStore = create((set, get) => ({
       if (get().isDirty) get().saveDiagram();
     }, 1500);
     set({ _autoSaveTimer: timer });
+  },
+
+  /** Simpan segera (Cmd/Ctrl+S, sebelum meninggalkan halaman). */
+  flush: async () => {
+    if (get()._autoSaveTimer) {
+      clearTimeout(get()._autoSaveTimer);
+      set({ _autoSaveTimer: null });
+    }
+    if (get().isDirty) await get().saveDiagram();
   },
 
   markDirty: (vaultPath, projectId, filename) => {
@@ -51,13 +267,23 @@ export const useEditorStore = create((set, get) => ({
   },
 
   loadDiagram: async (vaultPath, projectId, filename) => {
+    // Perubahan <1500 ms pada diagram sebelumnya disimpan dulu, bukan dibuang.
+    if (get().isDirty) await get().flush();
     // Clear any existing auto-save timer before loading new diagram
     if (get()._autoSaveTimer) {
       clearTimeout(get()._autoSaveTimer);
       set({ _autoSaveTimer: null });
     }
+    get().resetHistory();
 
-    set({ isLoading: true, loadError: null, _vaultPath: vaultPath, _projectId: projectId, _filename: filename });
+    set({
+      isLoading: true,
+      loadError: null,
+      _vaultPath: vaultPath,
+      _projectId: projectId,
+      _filename: filename,
+      _loadToken: get()._loadToken + 1,
+    });
     try {
       const filePath = await window.api.pathJoin(vaultPath, 'projects', projectId, 'diagrams', filename);
       const content = await window.api.readFile(filePath);
@@ -68,13 +294,26 @@ export const useEditorStore = create((set, get) => ({
         parsedCanvas = { x: parsedCanvas.pan.x || 0, y: parsedCanvas.pan.y || 0, zoom: parsedCanvas.zoom || 1 };
       }
 
+      const isArch = data.meta?.type === ARCH_TYPE_ID;
+      const layers = isArch
+        ? migrateArchLayer(data.nodes || [], data.edges || [])
+        : { nodes: data.nodes || [], edges: data.edges || [] };
+
+      // Normalisasi untuk SEMUA tipe: tipe lain mendapat [] kosong, jadi file
+      // rusak/field hilang tidak crash dan state lama tidak terbawa.
+      const seq = normalizeSequence(data);
+
       set({
         diagramMeta: data.meta,
         tables: (data.tables || []).map(t => ({ ...t, type: 'table' })),
         relationships: data.relationships || [],
-        nodes: data.nodes || [],
-        flowEdges: data.edges || [],
+        nodes: layers.nodes,
+        flowEdges: layers.edges,
         canvasState: parsedCanvas,
+        participants: seq.participants,
+        messages: seq.messages,
+        sequenceOptions: seq.options,
+        selectedSequenceItem: null,
         isLoading: false,
         isDirty: false,
         selectedTableId: null,
@@ -89,7 +328,10 @@ export const useEditorStore = create((set, get) => ({
   },
 
   saveDiagram: async () => {
-    const { _pendingSave, diagramMeta, tables, relationships, nodes, flowEdges, canvasState, isDirty } = get();
+    const {
+      _pendingSave, diagramMeta, tables, relationships, nodes, flowEdges, canvasState,
+      participants, messages, sequenceOptions, isDirty,
+    } = get();
     if (!_pendingSave || !diagramMeta || !isDirty) return;
 
     const { vaultPath, projectId, filename } = _pendingSave;
@@ -108,6 +350,14 @@ export const useEditorStore = create((set, get) => ({
         edges: flowEdges
       };
 
+      // Ditulis SETELAH literal, bukan spread bernilai undefined: file lima
+      // tipe lama tetap 7 kunci.
+      if (getDiagramType(diagramMeta.type).dataShape === 'sequence') {
+        fileData.participants = participants;
+        fileData.messages = messages;
+        fileData.options = sequenceOptions;
+      }
+
       await window.api.writeFile(filePath, JSON.stringify(fileData, null, 2));
       set({ isDirty: false, diagramMeta: updatedMeta, _pendingSave: null });
     } catch (e) {
@@ -123,6 +373,7 @@ export const useEditorStore = create((set, get) => ({
       position,
       data: { name: 'new_table', columns: [] }
     };
+    get().commitHistory('action');
     set({ tables: [...tables, newTable] });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -131,6 +382,7 @@ export const useEditorStore = create((set, get) => ({
   // === TABLE: CRUD ========================================================
   updateTable: (tableId, dataUpdates) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
     set((state) => ({
       tables: state.tables.map(t =>
         t.id === tableId ? { ...t, data: { ...t.data, ...dataUpdates } } : t
@@ -142,6 +394,7 @@ export const useEditorStore = create((set, get) => ({
 
   deleteTable: (tableId) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => {
       // Find relationships that will be removed (involving the deleted table)
       const removedRels = state.relationships.filter(
@@ -151,30 +404,12 @@ export const useEditorStore = create((set, get) => ({
         e => e.source !== tableId && e.target !== tableId
       );
 
-      // For each removed relationship where the target is NOT the deleted table,
-      // check if the target column still has other relationships pointing to it
-      const updatedTables = state.tables
-        .filter(t => t.id !== tableId)
-        .map(t => {
-          let tableChanged = false;
-          const updatedCols = t.data.columns.map(col => {
-            // Check if this column was a target of a removed relationship
-            const wasTargetOfRemoved = removedRels.some(r => r.target === t.id && r.targetHandle === col.id);
-            if (wasTargetOfRemoved && col.fk) {
-              // Check if any remaining relationship still targets this column
-              const stillTargeted = remainingRels.some(r => r.target === t.id && r.targetHandle === col.id);
-              if (!stillTargeted) {
-                tableChanged = true;
-                return { ...col, fk: false };
-              }
-            }
-            return col;
-          });
-          return tableChanged ? { ...t, data: { ...t.data, columns: updatedCols } } : t;
-        });
-
       return {
-        tables: updatedTables,
+        tables: clearOrphanFk(
+          state.tables.filter(t => t.id !== tableId),
+          removedRels,
+          remainingRels
+        ),
         relationships: remainingRels,
         selectedTableId: state.selectedTableId === tableId ? null : state.selectedTableId,
       };
@@ -202,6 +437,7 @@ export const useEditorStore = create((set, get) => ({
       },
     };
 
+    get().commitHistory('action');
     set({ tables: [...tables, newTable] });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -210,6 +446,7 @@ export const useEditorStore = create((set, get) => ({
   // === COLUMN: CRUD =======================================================
   addColumn: (tableId) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => ({
       tables: state.tables.map(t => {
         if (t.id === tableId) {
@@ -233,6 +470,7 @@ export const useEditorStore = create((set, get) => ({
 
   updateColumn: (tableId, columnId, dataUpdates) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
     set((state) => ({
       tables: state.tables.map(t => {
         if (t.id === tableId) {
@@ -250,15 +488,14 @@ export const useEditorStore = create((set, get) => ({
 
   deleteColumn: (tableId, columnId) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => {
       // Also remove relationships tied to this column
-      const newEdges = state.relationships.filter(
-        e =>
-          !(
-            (e.source === tableId && e.sourceHandle === columnId) ||
-            (e.target === tableId && e.targetHandle === columnId)
-          )
-      );
+      const isTied = e =>
+        (e.source === tableId && e.sourceHandle === columnId) ||
+        (e.target === tableId && e.targetHandle === columnId);
+      const removedRels = state.relationships.filter(isTied);
+      const newEdges = state.relationships.filter(e => !isTied(e));
 
       const newTables = state.tables.map(t => {
         if (t.id === tableId) {
@@ -270,7 +507,10 @@ export const useEditorStore = create((set, get) => ({
         return t;
       });
 
-      return { tables: newTables, relationships: newEdges };
+      return {
+        tables: clearOrphanFk(newTables, removedRels, newEdges),
+        relationships: newEdges,
+      };
     });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -278,6 +518,7 @@ export const useEditorStore = create((set, get) => ({
 
   reorderColumns: (tableId, oldIndex, newIndex) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => ({
       tables: state.tables.map(t => {
         if (t.id === tableId) {
@@ -295,6 +536,7 @@ export const useEditorStore = create((set, get) => ({
 
   toggleTableVisibility: (tableId) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set((state) => ({
       tables: state.tables.map(t =>
         t.id === tableId ? { ...t, hidden: !t.hidden } : t
@@ -307,6 +549,7 @@ export const useEditorStore = create((set, get) => ({
   // === RELATIONSHIP =======================================================
   updateRelationshipLabel: (edgeId, label) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
     set((state) => ({
       relationships: state.relationships.map(e =>
         e.id === edgeId ? { ...e, label } : e
@@ -318,9 +561,15 @@ export const useEditorStore = create((set, get) => ({
 
   deleteRelationship: (edgeId) => {
     const { _vaultPath, _projectId, _filename } = get();
-    set((state) => ({
-      relationships: state.relationships.filter(e => e.id !== edgeId),
-    }));
+    get().commitHistory('action');
+    set((state) => {
+      const removedRels = state.relationships.filter(e => e.id === edgeId);
+      const remainingRels = state.relationships.filter(e => e.id !== edgeId);
+      return {
+        relationships: remainingRels,
+        tables: clearOrphanFk(state.tables, removedRels, remainingRels),
+      };
+    });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
@@ -350,6 +599,7 @@ export const useEditorStore = create((set, get) => ({
       style: type === 'annotation' ? { width } : { width, height }
     };
 
+    get().commitHistory('action');
     set({ nodes: [...nodes, newNode] });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
@@ -373,15 +623,240 @@ export const useEditorStore = create((set, get) => ({
     if (subtype === USECASE_NODE_TYPES.SYSTEM_BOUNDARY) {
       set({ nodes: [newNode, ...nodes] });
     } else {
+    get().commitHistory('action');
       set({ nodes: [...nodes, newNode] });
     }
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
 
+  // === STATE MACHINE: tambah node ===
+  addStateMachineNode: (subtype, position) => {
+    const { nodes, _vaultPath, _projectId, _filename } = get();
+    const size = SM_DEFAULT_SIZES[subtype] || SM_DEFAULT_SIZES[SM_NODE_TYPES.STATE];
+    const baseLabel = SM_DEFAULT_LABELS[subtype] ?? '';
+
+    const newNode = {
+      id: `sm-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'statemachine',
+      position,
+      data:
+        subtype === SM_NODE_TYPES.STATE
+          ? { type: subtype, label: baseLabel, entry: '', exit: '', do: '' }
+          : { type: subtype, label: baseLabel },
+      style: { width: size.width, height: size.height },
+    };
+
+    get().commitHistory('action');
+    set({ nodes: [...nodes, newNode] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Label transition ("event [guard] / action"). Satu snapshot per burst ketikan. */
+  setStateMachineEdgeLabel: (edgeId, label) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
+    set((state) => ({
+      flowEdges: state.flowEdges.map((e) =>
+        e.id === edgeId ? { ...e, data: { ...e.data, label } } : e,
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+  // === ARCHITECTURE: tambah node ===
+  addArchitectureNode: (subtype, position) => {
+    const { nodes, _vaultPath, _projectId, _filename } = get();
+    const size = ARCH_DEFAULT_SIZES[subtype] || ARCH_DEFAULT_SIZES[ARCH_NODE_TYPES.CONTAINER];
+
+    const newNode = {
+      id: `arch-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'architecture',
+      position,
+      data: {
+        type: subtype,
+        label: ARCH_DEFAULT_LABELS[subtype] ?? '',
+        ...ARCH_DEFAULT_FIELDS[subtype],
+      },
+      style: { width: size.width, height: size.height },
+    };
+
+    // Satu snapshot per aksi, untuk kedua jalur (boundary & bukan).
+    get().commitHistory('action');
+
+    // Boundary adalah pengelompok visual: layer paling belakang (zIndex
+    // negatif) DAN wrapper node `pointer-events: none` — NodeWrapper React Flow
+    // menulis inline `pointerEvents: 'all'`, dan `...node.style` menang, jadi
+    // hanya lewat `style` badan boundary bisa meneruskan klik ke edge di
+    // atasnya. Header/tepi/handle/NodeResizer mengembalikan `auto` sendiri.
+    if (subtype === ARCH_NODE_TYPES.BOUNDARY) {
+      set({
+        nodes: [
+          { ...newNode, zIndex: ARCH_BOUNDARY_Z, style: { ...size, pointerEvents: 'none' } },
+          ...nodes,
+        ],
+      });
+    } else {
+      set({ nodes: [...nodes, newNode] });
+    }
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Label relationship ("description" + "[technology]"). Satu snapshot per burst. */
+  setArchitectureEdgeData: (edgeId, patch) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
+    set((state) => ({
+      flowEdges: state.flowEdges.map((e) =>
+        e.id === edgeId ? { ...e, data: { ...e.data, ...patch } } : e,
+      ),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  // === SEQUENCE: participants + messages =================================
+  // Semua aksi membuat array/objek BARU: `captureSnapshot` menyimpan
+  // referensi, jadi mutasi in-place merusak state hidup sekaligus history.
+
+  addSequenceParticipant: (kind = SQ_DEFAULT_PARTICIPANT_KIND) => {
+    const { participants, _vaultPath, _projectId, _filename } = get();
+    const participant = {
+      id: `sqp-${Date.now()}`,
+      name: SQ_DEFAULT_PARTICIPANT_NAME,
+      kind,
+    };
+    get().commitHistory('action');
+    set({ participants: [...participants, participant] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Ganti nama / kind. Satu snapshot per burst ketikan. */
+  updateSequenceParticipant: (id, patch) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
+    set((state) => ({
+      participants: state.participants.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  moveSequenceParticipant: (id, delta) => {
+    const { participants } = get();
+    const from = participants.findIndex((p) => p.id === id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= participants.length) return;
+    get().commitHistory('action');
+    const next = [...participants];
+    [next[from], next[to]] = [next[to], next[from]];
+    const { _vaultPath, _projectId, _filename } = get();
+    set({ participants: next });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Hapus peserta + SEMUA pesan yang melibatkannya dalam satu snapshot. */
+  deleteSequenceParticipant: (id) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
+    set((state) => ({
+      participants: state.participants.filter((p) => p.id !== id),
+      messages: state.messages.filter((m) => m.from !== id && m.to !== id),
+      selectedSequenceItem:
+        state.selectedSequenceItem?.id === id ? null : state.selectedSequenceItem,
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** Tambah pesan di akhir, atau tepat setelah `afterId` (item terpilih). */
+  addSequenceMessage: (patch = {}, afterId = null) => {
+    const { participants, messages, selectedSequenceItem, _vaultPath, _projectId, _filename } = get();
+    const endpoints = pickMessageEndpoints(
+      { participants, messages },
+      {
+        afterId,
+        selectedParticipantId:
+          selectedSequenceItem?.type === 'participant' ? selectedSequenceItem.id : null,
+        from: patch.from,
+        to: patch.to,
+      },
+    );
+    if (!endpoints) return; // pesan butuh peserta
+
+    const message = {
+      id: `sqm-${Date.now()}`,
+      ...endpoints,
+      label: patch.label ?? SQ_DEFAULT_MESSAGE_LABEL,
+      kind: SQ_MESSAGE_KINDS.includes(patch.kind) ? patch.kind : SQ_DEFAULT_MESSAGE_KIND,
+    };
+
+    const found = afterId ? messages.findIndex((m) => m.id === afterId) : -1;
+    const at = found >= 0 ? found + 1 : messages.length;
+
+    get().commitHistory('action');
+    set({ messages: [...messages.slice(0, at), message, ...messages.slice(at)] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  updateSequenceMessage: (id, patch) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
+    set((state) => ({
+      messages: state.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  moveSequenceMessage: (id, delta) => {
+    const { messages } = get();
+    const from = messages.findIndex((m) => m.id === id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= messages.length) return;
+    get().commitHistory('action');
+    const next = [...messages];
+    [next[from], next[to]] = [next[to], next[from]];
+    const { _vaultPath, _projectId, _filename } = get();
+    set({ messages: next });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  deleteSequenceMessage: (id) => {
+    const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
+    set((state) => ({
+      messages: state.messages.filter((m) => m.id !== id),
+      selectedSequenceItem:
+        state.selectedSequenceItem?.id === id ? null : state.selectedSequenceItem,
+    }));
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  /** `{ type: 'participant' | 'message', id }` — di luar history. */
+  setSelectedSequenceItem: (item) => set({ selectedSequenceItem: item }),
+
+  /** Opsi tampilan: bukan isi diagram, jadi tanpa snapshot history. */
+  toggleSequenceNumbers: () => {
+    const { sequenceOptions, _vaultPath, _projectId, _filename } = get();
+    set({ sequenceOptions: { ...sequenceOptions, showNumbers: !sequenceOptions.showNumbers } });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+
+
   // === USE CASE: replace all (untuk import JSON) ===
   replaceUseCaseGraph: ({ nodes, edges, canvasState }) => {
     const { _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('action');
     set({
       nodes: nodes || [],
       flowEdges: edges || [],
@@ -393,6 +868,7 @@ export const useEditorStore = create((set, get) => ({
 
   updateNodeData: (id, newData) => {
     const { nodes, _vaultPath, _projectId, _filename } = get();
+    get().commitHistory('typing');
     set({
       nodes: nodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...newData } } : n),
     });
@@ -403,6 +879,39 @@ export const useEditorStore = create((set, get) => ({
   onNodesChange: (changes) => {
     const { _vaultPath, _projectId, _filename, diagramMeta } = get();
     const type = diagramMeta?.type;
+    // Klasifikasi batch SEBELUM state diubah, supaya snapshot history berisi
+    // keadaan sebelum perubahan. Selection/kosmetik tidak masuk history.
+    // React Flow menandai geseran gestur dengan `dragging: true` pada change
+    // `position`, bukan dengan `type: 'drag'`.
+    const isDragging = changes.some(c => c.dragging === true);
+    const hasPosition = changes.some(c => c.type === 'position');
+    const hasData = changes.some(
+      c => c.type === 'remove' || c.type === 'add' || c.type === 'dimensions',
+    );
+    if (isDragging) {
+      // Satu entri per drag: change berikutnya dalam gestur yang sama
+      // dilewati sampai gestur berakhir (tidak lagi membawa `dragging`).
+      if (!_dragInProgress) {
+        _dragInProgress = true;
+        get().commitHistory('action');
+      }
+    } else if (hasData) {
+      _dragInProgress = false;
+      get().commitHistory('action');
+    } else if (!hasPosition) {
+      // Selection / position_info: bukan perubahan bermakna (tidak masuk
+      // history, tidak bikin dirty) TAPI tetap harus diterapkan ke state.
+      // `nodes`/`tables` adalah sumber kebenaran React Flow (controlled):
+      // kalau dibuang, `node.selected` tak pernah jadi true dan Delete tak
+      // punya target.
+      _dragInProgress = false;
+      if (isGraphType(type)) {
+        set({ nodes: applyNodeChanges(changes, get().nodes) });
+      } else {
+        set({ tables: applyNodeChanges(changes, get().tables) });
+      }
+      return;
+    }
     if (isGraphType(type)) {
       let nextNodes = applyNodeChanges(changes, get().nodes);
 
@@ -426,6 +935,10 @@ export const useEditorStore = create((set, get) => ({
   onEdgesChange: (changes) => {
     const { _vaultPath, _projectId, _filename, diagramMeta } = get();
     const type = diagramMeta?.type;
+    // Hanya hapus edge yang mengubah data; selection edge tidak masuk history
+    // dan tidak menandai dirty.
+    if (!changes.some(c => c.type === 'remove')) return;
+    get().commitHistory('action');
     if (isGraphType(type)) {
       set({ flowEdges: applyEdgeChanges(changes, get().flowEdges) });
     } else {
@@ -438,29 +951,10 @@ export const useEditorStore = create((set, get) => ({
         const currentRelationships = get().relationships;
         const removedRels = currentRelationships.filter(r => removedIds.includes(r.id));
         const remainingRels = currentRelationships.filter(r => !removedIds.includes(r.id));
-        
-        // For each removed relationship, check if target column still has other relationships pointing to it
-        const updatedTables = get().tables.map(t => {
-          let tableChanged = false;
-          const updatedCols = t.data.columns.map(col => {
-            // Check if this column was a target of a removed relationship
-            const wasTargetOfRemoved = removedRels.some(r => r.target === t.id && r.targetHandle === col.id);
-            if (wasTargetOfRemoved && col.fk) {
-              // Check if any remaining relationship still targets this column
-              const stillTargeted = remainingRels.some(r => r.target === t.id && r.targetHandle === col.id);
-              if (!stillTargeted) {
-                tableChanged = true;
-                return { ...col, fk: false };
-              }
-            }
-            return col;
-          });
-          return tableChanged ? { ...t, data: { ...t.data, columns: updatedCols } } : t;
-        });
-        
-        set({ 
+
+        set({
           relationships: applyEdgeChanges(changes, currentRelationships),
-          tables: updatedTables
+          tables: clearOrphanFk(get().tables, removedRels, remainingRels),
         });
       } else {
         set({ relationships: applyEdgeChanges(changes, get().relationships) });
@@ -473,89 +967,17 @@ export const useEditorStore = create((set, get) => ({
   onConnect: (connection) => {
     const { _vaultPath, _projectId, _filename, diagramMeta } = get();
     const type = diagramMeta?.type;
+    // Snapshot diambil sebelum strategi mengubah state; baru dipakai bila
+    // koneksi diterima (strategi ERD bisa menolak).
+    const preConnect = captureSnapshot(get());
 
-    if (type === 'usecase') {
-      const relType = get().usecaseRelType || USECASE_REL_TYPES.ASSOCIATION;
-      const newEdge = {
-        ...connection,
-        id: `uce-${connection.source}-${connection.target}-${Date.now()}`,
-        type: 'usecase',
-        data: { relType },
-      };
-      set({ flowEdges: addEdge(newEdge, get().flowEdges) });
-    } else if (type === 'flowchart') {
-      const sourceNode = get().nodes.find(n => n.id === connection.source);
-      let edgeLabel = '';
+    const strategy = CONNECT_STRATEGIES[getDiagramType(type).id];
+    const patch = strategy ? strategy(connection, { get }) : null;
+    if (!patch) return;
 
-      if (sourceNode?.data?.type === 'decision') {
-        const existingOutEdges = get().flowEdges.filter(e => e.source === sourceNode.id);
-        edgeLabel = existingOutEdges.length === 0 ? 'Yes' : 'No';
-      }
-
-      const newEdge = {
-        ...connection,
-        id: `e-${connection.source}-${connection.target}-${Date.now()}`,
-        label: edgeLabel,
-        type: 'smoothstep',
-        style: { stroke: '#a1a1aa', strokeWidth: 1.5 },
-        labelStyle: { fill: '#e4e4e7', fontWeight: 600, fontSize: 12 },
-        labelBgStyle: { fill: '#18181b', stroke: '#3f3f46', strokeWidth: 1 },
-        labelBgPadding: [6, 4],
-        labelBgBorderRadius: 4,
-        markerEnd: { type: 'arrowclosed', color: '#a1a1aa' }
-      };
-
-      set({ flowEdges: addEdge(newEdge, get().flowEdges) });
-    } else {
-      // ERD: Set FK on target column like old version
-      const { tables, relationships } = get();
-      const sourceTable = tables.find(t => t.id === connection.source);
-      const targetTable = tables.find(t => t.id === connection.target);
-      const sourceCol = sourceTable?.data.columns.find(c => c.id === connection.sourceHandle);
-      const targetCol = targetTable?.data.columns.find(c => c.id === connection.targetHandle);
-
-      if (!sourceCol || !targetCol) return;
-
-      let parentCol = null, childCol = null;
-      let childTableId = null;
-
-      if (targetCol.pk && !sourceCol.pk) {
-        parentCol = targetCol;
-        childCol = sourceCol;
-        childTableId = connection.source;
-      } else if (sourceCol.pk && !targetCol.pk) {
-        parentCol = sourceCol;
-        childCol = targetCol;
-        childTableId = connection.target;
-      } else {
-        parentCol = targetCol;
-        childCol = sourceCol;
-        childTableId = connection.source;
-      }
-
-      const edge = {
-        ...connection,
-        id: `rel-${Date.now()}`,
-        type: 'smoothstep',
-        animated: false,
-        style: { strokeWidth: 1.5 }
-      };
-
-      const updatedTables = tables.map(t => {
-        if (t.id === childTableId) {
-          const updatedCols = t.data.columns.map(c =>
-            c.id === childCol.id ? { ...c, type: parentCol.type, fk: true } : c
-          );
-          return { ...t, data: { ...t.data, columns: updatedCols } };
-        }
-        return t;
-      });
-
-      set({
-        relationships: addEdge(edge, relationships),
-        tables: updatedTables,
-      });
-    }
+    set(patch);
+    // Satu snapshot per koneksi.
+    set((state) => ({ historyPast: pushStack(state.historyPast, preConnect), historyFuture: [] }));
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
@@ -569,11 +991,26 @@ export const useEditorStore = create((set, get) => ({
 
   setSelectedTable: (id) => set({ selectedTableId: id }),
 
-  cleanup: () => {
+  /** Buang seluruh history (dipakai loadDiagram + cleanup). */
+  resetHistory: () => {
+    if (get()._historyTimer) clearTimeout(get()._historyTimer);
+    _burstSnapshot = null;
+    _dragInProgress = false;
+    set({ historyPast: [], historyFuture: [], _historyTimer: null });
+  },
+
+  /**
+   * `token` = `_loadToken` yang dibaca sinkron saat cleanup dijadwalkan.
+   * Cleanup dari mount lama (sudah ada load lebih baru) diabaikan. Tanpa
+   * argumen, perilaku lama: selalu bersihkan.
+   */
+  cleanup: (token = null) => {
+    if (token !== null && token !== get()._loadToken) return;
     const { _autoSaveTimer } = get();
     if (_autoSaveTimer) {
       clearTimeout(_autoSaveTimer);
     }
+    get().resetHistory();
     set({
       _autoSaveTimer: null,
       _pendingSave: null,
@@ -586,6 +1023,10 @@ export const useEditorStore = create((set, get) => ({
       nodes: [],
       flowEdges: [],
       canvasState: { x: 0, y: 0, zoom: 1 },
+      participants: [],
+      messages: [],
+      sequenceOptions: { showNumbers: false },
+      selectedSequenceItem: null,
       isDirty: false,
       isLoading: false,
       loadError: null,
