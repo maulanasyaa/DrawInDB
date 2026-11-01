@@ -1,0 +1,6 @@
+[     220ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-EJTTOCY5.js?v=413656ef:21550
+[     283ms] [WARNING] window.api not found. Running in browser mode? @ http://localhost:5173/src/store/vaultStore.js:191
+[     283ms] [WARNING] window.api not found. Running in browser mode? @ http://localhost:5173/src/store/vaultStore.js:191
+[   33070ms] [LOG] localStorage keys: [drawindb:vault, drawindb-theme] @ :3
+[   33073ms] [LOG] drawindb:vault {"path":"/tmp/test-vault"} @ :4
+[   33073ms] [LOG] drawindb-theme {"state":{"theme":"light"},"version":0} @ :4

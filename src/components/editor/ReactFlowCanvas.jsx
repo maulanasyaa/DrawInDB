@@ -114,6 +114,7 @@ export default function ReactFlowCanvas({ editorConfig }) {
             zoomable
             position="bottom-left"
             ariaLabel="Mini Map"
+            style={{ border: '2px solid red' }}
           />
         )}
       </ReactFlow>

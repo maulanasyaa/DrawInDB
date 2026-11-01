@@ -1,0 +1,3 @@
+[     334ms] [ERROR] Failed to save diagram: TypeError: window.api.writeFile is not a function
+    at Object.saveDiagram (http://localhost:5173/src/store/editorStore.js:365:24)
+    at async Object.flush (http://localhost:5173/src/store/editorStore.js:260:24) @ http://localhost:5173/src/store/editorStore.js:367

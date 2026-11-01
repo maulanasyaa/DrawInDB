@@ -1,0 +1,23 @@
+- generic [ref=e2]:
+  - button "Switch to Dark Mode" [ref=e3]
+  - generic [ref=e10]:
+    - generic [ref=e11]: DrawInDB
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - img [aria-hidden] [ref=e21]:
+          - generic [ref=e27]:
+            - generic [ref=e28]: "1"
+            - generic [ref=e29]: "*"
+        - heading "Choose your workspace." [level=1] [ref=e30]
+        - paragraph [ref=e31]: Select a local vault to continue your database design workflow. Your data remains strictly on your machine.
+      - generic [ref=e32]:
+        - button "Open Folder" [ref=e33] [cursor=pointer]
+        - button "Create Vault" [ref=e34] [cursor=pointer]
+      - paragraph [ref=e35]: A vault is any folder that contains a .drawindb directory.
+      - list [ref=e37]:
+        - listitem [ref=e38]: ERD
+        - listitem [ref=e43]: Flowchart
+        - listitem [ref=e48]: Use Case Diagram
+        - listitem [ref=e54]: State Machine
+        - listitem [ref=e57]: Architecture
+        - listitem [ref=e62]: Sequence Diagram

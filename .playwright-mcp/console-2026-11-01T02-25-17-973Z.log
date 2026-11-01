@@ -1,0 +1,4 @@
+[    1156ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-EJTTOCY5.js?v=413656ef:21550
+[    1271ms] [WARNING] window.api not found. Running in browser mode? @ http://localhost:5173/src/store/vaultStore.js:191
+[    1272ms] [WARNING] window.api not found. Running in browser mode? @ http://localhost:5173/src/store/vaultStore.js:191
+[    1307ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:0

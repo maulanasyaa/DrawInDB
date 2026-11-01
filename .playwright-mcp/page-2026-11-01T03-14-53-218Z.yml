@@ -1,0 +1,37 @@
+- generic [ref=f3e1]:
+  - generic [ref=f3e2]:
+    - button "Switch to Dark Mode" [ref=f3e3]
+    - generic [ref=f3e330]:
+      - generic [ref=f3e331]:
+        - generic [ref=f3e332]:
+          - button "Back" [ref=f3e333]
+          - generic [ref=f3e336]: /
+          - generic [ref=f3e337]: Test Vault
+          - generic [ref=f3e338]: /
+          - generic [ref=f3e339]: Test Project
+          - generic [ref=f3e340]: /
+          - generic [ref=f3e341]: Flowcharts
+        - heading "Flowchart Workspace" [level=1] [ref=f3e342]
+      - generic [ref=f3e343]:
+        - heading "Quick Start" [level=2] [ref=f3e344]
+        - generic [ref=f3e349] [cursor=pointer]:
+          - heading "New Flowchart" [level=3] [ref=f3e350]
+          - paragraph [ref=f3e351]: Create a blank canvas.
+      - generic [ref=f3e352]:
+        - generic [ref=f3e353]:
+          - heading "Your Flowcharts" [level=2] [ref=f3e354]
+          - textbox "Search diagrams" [ref=f3e356]:
+            - /placeholder: Search diagrams…
+        - generic [ref=f3e358]:
+          - heading "No Flowcharts yet" [level=3] [ref=f3e359]
+          - paragraph [ref=f3e360]: Start by creating one above.
+  - generic [ref=f3e362]:
+    - generic [ref=f3e363]:
+      - heading "New Flowchart" [level=2] [ref=f3e364]
+      - paragraph [ref=f3e365]: Create a new diagram in this project.
+    - generic [ref=f3e366]:
+      - generic [ref=f3e367]: Diagram Name
+      - textbox "e.g. Login Flow" [active] [ref=f3e368]
+    - generic [ref=f3e369]:
+      - button "Cancel" [ref=f3e370] [cursor=pointer]
+      - button "Create Diagram" [disabled] [ref=f3e371] [cursor=pointer]
