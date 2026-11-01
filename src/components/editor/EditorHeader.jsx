@@ -11,6 +11,7 @@ import {
   FiCornerUpLeft,
   FiCornerUpRight,
   FiCode,
+  FiNavigation,
 } from "react-icons/fi";
 import {
   buildUseCaseExport,
@@ -42,6 +43,8 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
   const historyFuture = useEditorStore((state) => state.historyFuture);
   const canUndo = historyPast.length > 0;
   const canRedo = historyFuture.length > 0;
+  const showMinimap = useEditorStore((state) => state.showMinimap);
+  const setShowMinimap = useEditorStore((state) => state.setShowMinimap);
 
   if (!diagramMeta) return null;
 
@@ -51,6 +54,7 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
   const isERD = isErdType(type);
   const badgeText = typeConfig.badge;
   const backLabel = typeConfig.backLabel;
+  const minimapSupported = typeConfig.minimap;
 
   const handleExportSQL = () => {
     let sql = `-- Exported from DrawInDB\n-- Diagram: ${diagramMeta.name}\n\n`;
@@ -248,6 +252,22 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
           >
             <FiDownload className="text-sm" />
             <span>Export SQL</span>
+          </button>
+        )}
+
+        {minimapSupported && (
+          <button
+            onClick={() => setShowMinimap(!showMinimap)}
+            aria-pressed={showMinimap}
+            className={`flex items-center gap-2 px-3 py-1.5 transition-colors rounded-md text-xs font-semibold ${
+              showMinimap
+                ? "text-primary bg-surface-2"
+                : "text-muted hover:text-primary hover:bg-surface-2"
+            }`}
+            title="Toggle Minimap"
+          >
+            <FiNavigation className="text-sm" />
+            <span>Minimap</span>
           </button>
         )}
 

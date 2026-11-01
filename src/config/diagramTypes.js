@@ -15,6 +15,7 @@ export const DIAGRAM_TYPES = {
     dataShape: "tables",
     hasDbType: true,
     exports: { png: true, sql: true, json: false },
+    minimap: true,
   },
   flowchart: {
     id: "flowchart",
@@ -28,6 +29,7 @@ export const DIAGRAM_TYPES = {
     dataShape: "graph",
     hasDbType: false,
     exports: { png: true, sql: false, json: false },
+    minimap: true,
   },
   usecase: {
     id: "usecase",
@@ -41,6 +43,7 @@ export const DIAGRAM_TYPES = {
     dataShape: "graph",
     hasDbType: false,
     exports: { png: true, sql: false, json: true },
+    minimap: true,
   },
   statemachine: {
     id: "statemachine",
@@ -54,6 +57,7 @@ export const DIAGRAM_TYPES = {
     dataShape: "graph",
     hasDbType: false,
     exports: { png: true, sql: false, json: false },
+    minimap: true,
   },
   architecture: {
     id: "architecture",
@@ -67,6 +71,7 @@ export const DIAGRAM_TYPES = {
     dataShape: "graph",
     hasDbType: false,
     exports: { png: true, sql: false, json: false },
+    minimap: true,
   },
   sequence: {
     id: "sequence",
@@ -80,6 +85,7 @@ export const DIAGRAM_TYPES = {
     dataShape: "sequence",
     hasDbType: false,
     exports: { png: true, sql: false, json: false },
+    minimap: false,
   },
 };
 

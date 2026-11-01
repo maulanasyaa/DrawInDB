@@ -60,9 +60,10 @@
   --table-color-4: #ffffff;
   --table-color-5: #ffffff;
   --table-color-6: #ffffff;
-  
+
   --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
   --dot-color: #bbbbbb;
+  --minimap-mask-color: rgba(0, 0, 0, 0.1);
 }
 
 :root[data-theme="dark"] {
@@ -96,9 +97,10 @@
   --table-color-4: #1c1917;
   --table-color-5: #1c1917;
   --table-color-6: #1c1917;
-  
+
   --shadow-soft: 0 4px 24px -2px rgba(0, 0, 0, 0.4);
   --dot-color: #3a3a3a;
+  --minimap-mask-color: rgba(255, 255, 255, 0.1);
 }
 
 body {
