@@ -112,7 +112,7 @@ export default function ReactFlowCanvas({ editorConfig }) {
             maskColor="var(--minimap-mask-color)"
             pannable
             zoomable
-            position="bottom-left"
+            position="bottom-right"
             ariaLabel="Mini Map"
             style={{ border: '2px solid red' }}
           />
