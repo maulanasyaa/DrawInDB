@@ -92,6 +92,8 @@ Helper: `getDiagramType(id)` (fallback ke `DEFAULT_DIAGRAM_TYPE = 'erd'` bila id
 
 Pemakai: `EditorHeader` + `DiagramCard` + `DiagramList` (`getDiagramType` → `hasDbType`, `exports`), `ProjectDetail` (`DIAGRAM_TYPE_LIST`, grid 6 kartu: `xl:grid-cols-3` → dua baris tiga), `Home` (`getDiagramType().badge`, urutan badge dari `DIAGRAM_TYPE_LIST`; badge `flex-wrap` jadi 6 tipe tidak meluber).
 
+`exports.sql` menggerbangi tombol "Export SQL" **dan** tombol toggle panel preview SQL — tidak ada cek `type === 'erd'` di komponen editor.
+
 ### 2a. Config editor per tipe: `src/config/editorTypes.jsx`
 Pemisahan supaya `diagramTypes.js` tetap bebas JSX. `EDITOR_TYPES[<id>]`:
 `sidebar`, `nodeTypes`, `edgeTypes`, `defaultEdge`, `addNode(type, position)`, `tips`, `overlays`, plus dua kunci **opsional**: `canvas` (komponen kanvas pengganti `<ReactFlow>`) dan `exportPng` (fungsi export PNG sendiri).
@@ -110,6 +112,8 @@ Helper: `getEditorConfig(id)` (fallback entri `erd`). `Editor.jsx` hanya membaca
 6. `saveDiagram()` menulis ulang seluruh file (`version`, `meta.updated_at` baru), lalu `isDirty=false`. `cleanup()` (unmount) membatalkan timer dan mengosongkan state.
 
 Store juga menyimpan state khusus tipe: `usecaseRelType` (use case) dan `selectedTableId` (ERD).
+
+**Panel preview SQL** (`components/editor/SQLPanel.jsx`, hanya tipe `exports.sql`): di-dock **in-flow** di bawah kanvas (bukan overlay), jadi `<Controls>` React Flow tidak tertutup. SQL dihitung `useMemo` lewat `utils/sqlPreview.js` → `generateSQL` (`utils/sqlGenerator.js`, tidak diubah). Pilihan dialek (`mysql|postgresql|sqlite|generic`) adalah state lokal panel dan **tidak** ditulis ke `meta.db_type`; status buka/tutup juga state `Editor.jsx`. Karena itu buka/tutup/ganti dialek tidak menambah entri history dan tidak menyalakan "Unsaved changes". Panel kosong (tanpa `CREATE TABLE`) menampilkan `EmptyState`, bukan error. Nama tabel/kolom di-escape sebelum dirender lewat `dangerouslySetInnerHTML`.
 
 ### Undo / redo
 - `historyPast` / `historyFuture` di `editorStore` berisi snapshot `{ tables, relationships, nodes, flowEdges }`, batas 100 entri per stack. Snapshot hanya di memori — tidak ditulis ke file diagram.

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ReactFlowProvider } from "reactflow";
 import "reactflow/dist/style.css";
@@ -7,9 +7,11 @@ import { AnimatePresence } from "framer-motion";
 import { useVaultStore } from "../store/vaultStore";
 import { useEditorStore } from "../store/editorStore";
 import { getEditorConfig } from "../config/editorTypes.jsx";
+import { getDiagramType } from "../config/diagramTypes";
 
 import EditorHeader from "../components/editor/EditorHeader";
 import ReactFlowCanvas from "../components/editor/ReactFlowCanvas";
+import SQLPanel from "../components/editor/SQLPanel";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { useEditorShortcuts } from "../hooks/useEditorShortcuts";
 
@@ -26,7 +28,11 @@ function EditorContent() {
   const diagramMeta = useEditorStore((state) => state.diagramMeta);
   const isSidebarOpen = useEditorStore((state) => state.isSidebarOpen);
 
+  // Panel preview SQL: murni UI, bukan state store — tidak masuk history/dirty.
+  const [sqlPreviewOpen, setSqlPreviewOpen] = useState(false);
+
   const editorConfig = getEditorConfig(diagramMeta?.type);
+  const typeConfig = getDiagramType(diagramMeta?.type);
   const EditorSidebar = editorConfig.sidebar;
   const EditorOverlay = editorConfig.overlays;
   // Tipe dengan kanvas sendiri (sequence) menyediakan komponen `canvas`;
@@ -74,9 +80,12 @@ function EditorContent() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-canvas text-primary overflow-hidden relative">
-      <EditorHeader />
+      <EditorHeader
+        sqlPreviewOpen={sqlPreviewOpen}
+        onToggleSqlPreview={() => setSqlPreviewOpen((v) => !v)}
+      />
 
-      <div className="flex-1 relative flex">
+      <div className="flex-1 min-h-0 relative flex">
         {renderSidebar()}
 
         {EditorOverlay && <EditorOverlay />}
@@ -85,6 +94,11 @@ function EditorContent() {
 
         {Canvas ? <Canvas /> : <ReactFlowCanvas editorConfig={editorConfig} />}
       </div>
+
+      {/* Dukungan preview SQL dibaca dari registry (`exports.sql`) — hanya ERD. */}
+      {sqlPreviewOpen && typeConfig.exports.sql && (
+        <SQLPanel onClose={() => setSqlPreviewOpen(false)} />
+      )}
     </div>
   );
 }

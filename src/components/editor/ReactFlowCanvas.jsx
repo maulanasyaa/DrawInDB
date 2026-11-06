@@ -1,7 +1,7 @@
 import React, { useCallback, useRef } from 'react';
-import ReactFlow, { Background, Controls, useReactFlow } from 'reactflow';
+import ReactFlow, { Background, Controls, MiniMap, useReactFlow } from 'reactflow';
 import { useEditorStore } from '../../store/editorStore';
-import { isGraphType } from '../../config/diagramTypes';
+import { getDiagramType, isGraphType } from '../../config/diagramTypes';
 
 /**
  * Kanvas React Flow untuk tipe `tables`/`graph`. Dipindah apa adanya dari
@@ -25,9 +25,12 @@ export default function ReactFlowCanvas({ editorConfig }) {
   const onConnect = useEditorStore((state) => state.onConnect);
   const updateCanvas = useEditorStore((state) => state.updateCanvas);
   const setSelectedTable = useEditorStore((state) => state.setSelectedTable);
+  const showMinimap = useEditorStore((state) => state.showMinimap);
 
   const isNodeBased = isGraphType(diagramType);
   const addNode = editorConfig.addNode;
+  const typeConfig = getDiagramType(diagramType);
+  const minimapEnabled = typeConfig.minimap && showMinimap;
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
@@ -99,6 +102,21 @@ export default function ReactFlowCanvas({ editorConfig }) {
       >
         <Background color="var(--dot-color)" gap={24} size={1} />
         <Controls className="!bg-surface !border-theme !fill-primary !text-primary shadow-lg" />
+        {minimapEnabled && (
+          <MiniMap
+            nodeColor="var(--text-muted)"
+            nodeStrokeColor="var(--border)"
+            nodeStrokeWidth={1}
+            nodeBorderRadius={3}
+            bgColor="var(--bg-surface)"
+            maskColor="var(--minimap-mask-color)"
+            pannable
+            zoomable
+            position="bottom-left"
+            ariaLabel="Mini Map"
+            style={{ border: '2px solid red' }}
+          />
+        )}
       </ReactFlow>
     </div>
   );

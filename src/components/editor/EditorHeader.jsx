@@ -10,6 +10,8 @@ import {
   FiImage,
   FiCornerUpLeft,
   FiCornerUpRight,
+  FiCode,
+  FiNavigation,
 } from "react-icons/fi";
 import {
   buildUseCaseExport,
@@ -19,7 +21,7 @@ import { exportDiagramAsImage } from "../../utils/exportImage";
 import { getDiagramType, isErdType } from "../../config/diagramTypes";
 import { getEditorConfig } from "../../config/editorTypes.jsx";
 
-export default function EditorHeader() {
+export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPreview }) {
   const navigate = useNavigate();
   const { projectId } = useParams();
   const fileInputRef = useRef(null);
@@ -41,6 +43,8 @@ export default function EditorHeader() {
   const historyFuture = useEditorStore((state) => state.historyFuture);
   const canUndo = historyPast.length > 0;
   const canRedo = historyFuture.length > 0;
+  const showMinimap = useEditorStore((state) => state.showMinimap);
+  const setShowMinimap = useEditorStore((state) => state.setShowMinimap);
 
   if (!diagramMeta) return null;
 
@@ -50,6 +54,7 @@ export default function EditorHeader() {
   const isERD = isErdType(type);
   const badgeText = typeConfig.badge;
   const backLabel = typeConfig.backLabel;
+  const minimapSupported = typeConfig.minimap;
 
   const handleExportSQL = () => {
     let sql = `-- Exported from DrawInDB\n-- Diagram: ${diagramMeta.name}\n\n`;
@@ -223,6 +228,22 @@ export default function EditorHeader() {
           </button>
         )}
 
+        {typeConfig.exports.sql && onToggleSqlPreview && (
+          <button
+            onClick={onToggleSqlPreview}
+            aria-pressed={sqlPreviewOpen}
+            className={`flex items-center gap-2 px-3 py-1.5 transition-colors rounded-md text-xs font-semibold ${
+              sqlPreviewOpen
+                ? "text-primary bg-surface-2"
+                : "text-muted hover:text-primary hover:bg-surface-2"
+            }`}
+            title="Toggle SQL preview"
+          >
+            <FiCode className="text-sm" />
+            <span>SQL</span>
+          </button>
+        )}
+
         {typeConfig.exports.sql && (
           <button
             onClick={handleExportSQL}
@@ -231,6 +252,22 @@ export default function EditorHeader() {
           >
             <FiDownload className="text-sm" />
             <span>Export SQL</span>
+          </button>
+        )}
+
+        {minimapSupported && (
+          <button
+            onClick={() => setShowMinimap(!showMinimap)}
+            aria-pressed={showMinimap}
+            className={`flex items-center gap-2 px-3 py-1.5 transition-colors rounded-md text-xs font-semibold ${
+              showMinimap
+                ? "text-primary bg-surface-2"
+                : "text-muted hover:text-primary hover:bg-surface-2"
+            }`}
+            title="Toggle Minimap"
+          >
+            <FiNavigation className="text-sm" />
+            <span>Minimap</span>
           </button>
         )}
 

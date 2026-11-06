@@ -132,6 +132,10 @@ export const useEditorStore = create((set, get) => ({
   _projectId: null,
   _filename: null,
 
+  // Minimap visibility (session-only, not persisted, not in history)
+  showMinimap: false,
+  setShowMinimap: (v) => set({ showMinimap: v }),
+
   // State khusus Use Case: relationship type yang aktif untuk koneksi baru
   usecaseRelType: USECASE_REL_TYPES.ASSOCIATION,
   setUseCaseRelType: (relType) => set({ usecaseRelType: relType }),
