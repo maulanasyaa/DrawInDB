@@ -18,7 +18,8 @@ function FieldRow({ field, onChange, onRemove }) {
         value={field.type}
         onChange={(e) => onChange({ type: e.target.value })}
         placeholder="string"
-        className="w-16 bg-transparent font-mono text-xs text-muted outline-none placeholder:text-muted"
+        list="api-schema-types"
+        className="w-20 bg-transparent font-mono text-xs text-muted outline-none placeholder:text-muted"
       />
       <label className="flex items-center gap-1 text-[10px] text-muted select-none shrink-0">
         <input
@@ -54,6 +55,18 @@ export default function SchemaNode({ id, data }) {
 
   return (
     <div className="min-w-60 premium-card shadow-sm">
+      <datalist id="api-schema-types">
+        <option value="string" />
+        <option value="integer" />
+        <option value="number" />
+        <option value="boolean" />
+        <option value="object" />
+        <option value="array" />
+        <option value="null" />
+        <option value="date-time" />
+        <option value="uuid" />
+        <option value="email" />
+      </datalist>
       <div className="px-4 py-3 border-b border-theme/50 flex items-center justify-between gap-2">
         <input
           value={data.name}
