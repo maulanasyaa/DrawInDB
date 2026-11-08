@@ -75,7 +75,14 @@ export const EDITOR_TYPES = {
     edgeTypes: {},
     defaultEdge: { type: 'smoothstep' },
     addNode: (type, position) => useEditorStore.getState().addApiNode(type, position),
-    tips: null,
+    tips: (
+      <Tips wide>
+        <strong className="text-primary font-medium">Tips:</strong> Drag from
+        the endpoint's <strong>req</strong>/<strong>res</strong> handle to a
+        schema for request/response; use the sidebar's{' '}
+        <strong>Link ERD Table</strong> to reference tables.
+      </Tips>
+    ),
     overlays: null,
   },
   flowchart: {

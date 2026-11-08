@@ -59,7 +59,7 @@ export default function SchemaNode({ id, data }) {
           value={data.name}
           onChange={(e) => commit({ name: e.target.value })}
           placeholder="Schema"
-          className="font-display text-base font-medium text-primary bg-transparent border-b border-theme outline-none focus:border-accent w-full placeholder:text-muted"
+          className="font-display text-base font-medium text-primary bg-base border border-theme rounded-lg px-2.5 py-1.5 outline-none focus:border-accent w-full placeholder:text-muted"
         />
         <span className="text-[10px] uppercase tracking-widest text-muted shrink-0">Schema</span>
       </div>

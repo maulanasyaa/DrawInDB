@@ -35,36 +35,42 @@ export default function EndpointNode({ id, data }) {
         <span className="text-[10px] uppercase tracking-widest text-muted">Endpoint</span>
       </div>
 
-      <div className="px-4 py-2 space-y-2">
-        <input
-          value={path}
-          onChange={(e) => {
-            setPath(e.target.value);
-            commit({ path: e.target.value });
-          }}
-          placeholder="/api/resource"
-          className="w-full bg-transparent font-mono text-xs text-primary border-b border-theme outline-none focus:border-accent placeholder:text-muted"
-        />
-        <input
-          value={summary}
-          onChange={(e) => {
-            setSummary(e.target.value);
-            commit({ summary: e.target.value });
-          }}
-          placeholder="Summary"
-          className="w-full bg-transparent text-xs text-primary border-b border-theme outline-none focus:border-accent placeholder:text-muted"
-        />
-        <input
-          value={tags}
-          onChange={(e) => {
-            setTags(e.target.value);
-            commit({
-              tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean),
-            });
-          }}
-          placeholder="Tags (comma separated)"
-          className="w-full bg-transparent text-xs text-muted border-b border-theme outline-none focus:border-accent placeholder:text-muted"
-        />
+      <div className="px-4 py-2.5 space-y-1.5">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 bg-base border border-theme rounded-lg hover:border-focus focus-within:border-accent transition-colors">
+          <input
+            value={path}
+            onChange={(e) => {
+              setPath(e.target.value);
+              commit({ path: e.target.value });
+            }}
+            placeholder="/api/resource"
+            className="flex-1 min-w-0 bg-transparent font-mono text-xs text-primary outline-none placeholder:text-muted"
+          />
+        </div>
+        <div className="flex items-center gap-2 px-2.5 py-1.5 bg-base border border-theme rounded-lg hover:border-focus focus-within:border-accent transition-colors">
+          <input
+            value={summary}
+            onChange={(e) => {
+              setSummary(e.target.value);
+              commit({ summary: e.target.value });
+            }}
+            placeholder="Summary"
+            className="flex-1 min-w-0 bg-transparent text-xs text-primary outline-none placeholder:text-muted"
+          />
+        </div>
+        <div className="flex items-center gap-2 px-2.5 py-1.5 bg-base border border-theme rounded-lg hover:border-focus focus-within:border-accent transition-colors">
+          <input
+            value={tags}
+            onChange={(e) => {
+              setTags(e.target.value);
+              commit({
+                tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean),
+              });
+            }}
+            placeholder="Tags (comma separated)"
+            className="flex-1 min-w-0 bg-transparent text-xs text-muted outline-none placeholder:text-muted"
+          />
+        </div>
       </div>
 
       <Handle type="target" position={Position.Left} />
