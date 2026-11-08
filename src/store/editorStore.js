@@ -722,7 +722,7 @@ export const useEditorStore = create((set, get) => ({
       style = { width: 240 };
     } else if (kind === 'schema') {
       data = { kind, name: API_DEFAULT_SCHEMA_NAME, fields: [] };
-      style = { width: 240 };
+      style = { width: 280 };
     } else {
       data = { kind, erdFilename: '', tableId: '', tableName: '', erdName: '', ...extraData };
       style = { width: 180 };

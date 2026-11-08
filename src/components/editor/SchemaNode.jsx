@@ -18,16 +18,7 @@ const SCHEMA_TYPE_OPTIONS = [
   'email',
 ];
 
-function FieldRow({ field, onChange, onRemove }) {
-  const [typeMenuOpen, setTypeMenuOpen] = React.useState(false);
-  const blurTimer = React.useRef(null);
-  const openTypeMenu = () => {
-    clearTimeout(blurTimer.current);
-    setTypeMenuOpen(true);
-  };
-  const closeTypeMenu = () => {
-    blurTimer.current = setTimeout(() => setTypeMenuOpen(false), 120);
-  };
+function FieldRow({ field, onChange, onRemove, menuOpen, onOpenMenu, onToggleMenu, onSelectType }) {
   return (
     <div className="group flex items-center gap-2 px-2.5 py-1.5 bg-base border border-theme rounded-lg hover:border-focus focus-within:border-accent transition-colors">
       <input
@@ -41,29 +32,31 @@ function FieldRow({ field, onChange, onRemove }) {
           value={field.type}
           onChange={(e) => onChange({ type: e.target.value })}
           placeholder="string"
-          onFocus={openTypeMenu}
-          onBlur={closeTypeMenu}
+          onFocus={onOpenMenu}
           className="w-20 bg-transparent font-mono text-xs text-muted outline-none placeholder:text-muted pr-5"
         />
         <button
           type="button"
           tabIndex={-1}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => (typeMenuOpen ? setTypeMenuOpen(false) : openTypeMenu())}
+          onClick={onToggleMenu}
           className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted hover:text-primary"
         >
           <FiChevronDown className="text-xs" />
         </button>
-        {typeMenuOpen && (
-          <div className="absolute z-30 top-full right-0 mt-1 w-36 bg-surface border border-theme rounded-lg shadow-xl overflow-hidden py-1">
+        {menuOpen && (
+          <div
+            ref={menuRef}
+            data-type-menu
+            className="absolute z-30 top-full right-0 mt-1 w-36 bg-surface border border-theme rounded-lg shadow-xl overflow-hidden py-1"
+          >
             {SCHEMA_TYPE_OPTIONS.map((opt) => (
               <button
                 key={opt}
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onChange({ type: opt });
-                  setTypeMenuOpen(false);
+                  onSelectType(opt);
                 }}
                 className="block w-full text-left px-3 py-1.5 text-xs font-mono text-primary hover:bg-hover"
               >
@@ -97,6 +90,21 @@ export default function SchemaNode({ id, data }) {
   const commit = (patch) => updateNodeData(id, patch);
   const fields = data.fields || [];
 
+  const [typeMenuFor, setTypeMenuFor] = React.useState(null);
+  const menuRef = React.useRef(null);
+
+  // Tutup menu saat klik di luar menu (termasuk kanvas/node lain).
+  React.useEffect(() => {
+    if (!typeMenuFor) return;
+    const onPointerDown = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setTypeMenuFor(null);
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [typeMenuFor]);
+
   const updateField = (fid, patch) =>
     commit({ fields: fields.map((f) => (f.id === fid ? { ...f, ...patch } : f)) });
 
@@ -106,7 +114,7 @@ export default function SchemaNode({ id, data }) {
     commit({ fields: [...fields, { id: makeFieldId(), name: '', type: 'string', required: false }] });
 
   return (
-    <div className="min-w-60 premium-card shadow-sm">
+    <div className="min-w-[280px] premium-card shadow-sm">
       <div className="px-4 py-3 border-b border-theme/50 flex items-center justify-between gap-2">
         <input
           value={data.name}
@@ -127,6 +135,18 @@ export default function SchemaNode({ id, data }) {
             field={f}
             onChange={(patch) => updateField(f.id, patch)}
             onRemove={() => removeField(f.id)}
+            menuOpen={typeMenuFor === f.id}
+            onOpenMenu={(e) => {
+              e?.stopPropagation?.();
+              setTypeMenuFor(f.id);
+            }}
+            onToggleMenu={() =>
+              setTypeMenuFor((cur) => (cur === f.id ? null : f.id))
+            }
+            onSelectType={(opt) => {
+              updateField(f.id, { type: opt });
+              setTypeMenuFor(null);
+            }}
           />
         ))}
         <button
