@@ -30,9 +30,7 @@ import FlowchartNode from '../components/editor/FlowchartNode';
 import UseCaseNode from '../components/editor/UseCaseNode';
 import StateMachineNode from '../components/editor/StateMachineNode';
 import ArchitectureNode from '../components/editor/ArchitectureNode';
-import EndpointNode from '../components/editor/EndpointNode';
-import SchemaNode from '../components/editor/SchemaNode';
-import TableRefNode from '../components/editor/TableRefNode';
+import ApiNode from '../components/editor/ApiNode';
 import UseCaseEdge from '../components/editor/UseCaseEdge';
 import StateMachineEdge from '../components/editor/StateMachineEdge';
 import ArchitectureEdge from '../components/editor/ArchitectureEdge';
@@ -73,7 +71,7 @@ export const EDITOR_TYPES = {
   },
   apicontract: {
     sidebar: ApiContractSidebar,
-    nodeTypes: { endpoint: EndpointNode, schema: SchemaNode, tableref: TableRefNode },
+    nodeTypes: { apicontract: ApiNode },
     edgeTypes: {},
     defaultEdge: { type: 'smoothstep' },
     addNode: (type, position) => useEditorStore.getState().addApiNode(type, position),

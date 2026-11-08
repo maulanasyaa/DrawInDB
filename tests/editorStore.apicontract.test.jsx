@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { useEditorStore } from '../src/store/editorStore.js';
 import { CONNECT_STRATEGIES } from '../src/config/connectStrategies.js';
+import { EDITOR_TYPES } from '../src/config/editorTypes.jsx';
 import { buildOpenApiExport } from '../src/utils/openapiExport.js';
 import { seed, restore, s } from './helpers.js';
 
@@ -47,6 +48,12 @@ describe('editorStore API Contract — addApiNode', () => {
     expect(n.data.tableName).toBe('users');
     expect(n.data.erdFilename).toBe('schema_erd.json');
     expect(n.data.erdName).toBe('Schema');
+  });
+});
+
+describe('registry editor API Contract', () => {
+  it('nodeTypes memakai satu kunci per tipe (dispatcher apicontract)', () => {
+    expect(Object.keys(EDITOR_TYPES.apicontract.nodeTypes)).toEqual(['apicontract']);
   });
 });
 
