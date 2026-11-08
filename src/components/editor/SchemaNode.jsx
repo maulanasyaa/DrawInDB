@@ -18,20 +18,7 @@ const SCHEMA_TYPE_OPTIONS = [
   'email',
 ];
 
-function FieldRow({ field, onChange, onRemove, menuOpen, onOpenMenu, onToggleMenu, onSelectType, onCloseMenu }) {
-  const menuRefLocal = React.useRef(null);
-
-  React.useEffect(() => {
-    if (!menuOpen) return;
-    const onPointerDown = (e) => {
-      if (menuRefLocal.current && !menuRefLocal.current.contains(e.target)) {
-        onCloseMenu();
-      }
-    };
-    window.addEventListener('pointerdown', onPointerDown);
-    return () => window.removeEventListener('pointerdown', onPointerDown);
-  }, [menuOpen, onCloseMenu]);
-
+function FieldRow({ field, onChange, onRemove, datalistId }) {
   return (
     <div className="group flex items-center gap-2 px-2.5 py-1.5 bg-base border border-theme rounded-lg hover:border-focus focus-within:border-accent transition-colors">
       <input
@@ -45,42 +32,10 @@ function FieldRow({ field, onChange, onRemove, menuOpen, onOpenMenu, onToggleMen
           value={field.type}
           onChange={(e) => onChange({ type: e.target.value })}
           placeholder="string"
-          onFocus={onOpenMenu}
+          list={datalistId}
           className="w-20 bg-transparent font-mono text-xs text-muted outline-none placeholder:text-muted pr-5"
         />
-        <button
-          type="button"
-          tabIndex={-1}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onClick={onToggleMenu}
-          className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted hover:text-primary"
-        >
-          <FiChevronDown className="text-xs" />
-        </button>
-        {menuOpen && (
-          <div
-            ref={menuRefLocal}
-            data-type-menu
-            className="absolute z-30 top-full right-0 mt-1 w-36 bg-surface border border-theme rounded-lg shadow-xl overflow-hidden py-1"
-          >
-            {SCHEMA_TYPE_OPTIONS.map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onSelectType(opt);
-                }}
-                className="block w-full text-left px-3 py-1.5 text-xs font-mono text-primary hover:bg-hover"
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        )}
+        <FiChevronDown className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
       </div>
       <label className="flex items-center gap-1 text-[10px] text-muted select-none shrink-0">
         <input
@@ -105,8 +60,7 @@ export default function SchemaNode({ id, data }) {
   const updateNodeData = useEditorStore((s) => s.updateNodeData);
   const commit = (patch) => updateNodeData(id, patch);
   const fields = data.fields || [];
-
-  const [typeMenuFor, setTypeMenuFor] = React.useState(null);
+  const datalistId = `schema-types-${id}`;
 
   const updateField = (fid, patch) =>
     commit({ fields: fields.map((f) => (f.id === fid ? { ...f, ...patch } : f)) });
@@ -118,6 +72,12 @@ export default function SchemaNode({ id, data }) {
 
   return (
     <div className="min-w-[280px] premium-card shadow-sm">
+      <datalist id={datalistId}>
+        {SCHEMA_TYPE_OPTIONS.map((opt) => (
+          <option key={opt} value={opt} />
+        ))}
+      </datalist>
+
       <div className="px-4 py-3 border-b border-theme/50 flex items-center justify-between gap-2">
         <input
           value={data.name}
@@ -138,19 +98,7 @@ export default function SchemaNode({ id, data }) {
             field={f}
             onChange={(patch) => updateField(f.id, patch)}
             onRemove={() => removeField(f.id)}
-            menuOpen={typeMenuFor === f.id}
-            onOpenMenu={(e) => {
-              e?.stopPropagation?.();
-              setTypeMenuFor(f.id);
-            }}
-            onToggleMenu={() =>
-              setTypeMenuFor((cur) => (cur === f.id ? null : f.id))
-            }
-            onSelectType={(opt) => {
-              updateField(f.id, { type: opt });
-              setTypeMenuFor(null);
-            }}
-            onCloseMenu={() => setTypeMenuFor(null)}
+            datalistId={datalistId}
           />
         ))}
         <button

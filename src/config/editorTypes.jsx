@@ -50,7 +50,7 @@ function Tips({ children, wide = false }) {
         wide ? 'max-w-[560px]' : ''
       }`}
       style={{
-        left: isSidebarOpen ? 'calc(50% - 160px)' : '50%',
+        left: isSidebarOpen ? 'calc(50% + 160px)' : '50%',
         transform: 'translateX(-50%)',
       }}
     >
