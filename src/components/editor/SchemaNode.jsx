@@ -1,7 +1,7 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
 import { useEditorStore } from '../../store/editorStore';
-import { FiPlus, FiX, FiChevronDown } from 'react-icons/fi';
+import { FiPlus, FiX } from 'react-icons/fi';
 
 const makeFieldId = () => `f-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
@@ -18,7 +18,7 @@ const SCHEMA_TYPE_OPTIONS = [
   'email',
 ];
 
-function FieldRow({ field, onChange, onRemove, datalistId }) {
+function FieldRow({ field, onChange, onRemove }) {
   return (
     <div className="group flex items-center gap-2 px-2.5 py-1.5 bg-base border border-theme rounded-lg hover:border-focus focus-within:border-accent transition-colors">
       <input
@@ -27,15 +27,20 @@ function FieldRow({ field, onChange, onRemove, datalistId }) {
         placeholder="field"
         className="flex-1 min-w-0 bg-transparent font-mono text-xs text-primary outline-none placeholder:text-muted"
       />
-      <div className="relative">
-        <input
+      <div className="flex items-center bg-base/30 border border-theme/30 rounded px-1.5 py-1 focus-within:border-focus transition-colors">
+        <select
           value={field.type}
           onChange={(e) => onChange({ type: e.target.value })}
-          placeholder="string"
-          list={datalistId}
-          className="w-20 bg-transparent font-mono text-xs text-muted outline-none placeholder:text-muted pr-5"
-        />
-        <FiChevronDown className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+          className="bg-transparent text-muted text-[11px] w-20 appearance-none cursor-pointer outline-none font-mono tracking-tight font-medium"
+        >
+          {[field.type, ...SCHEMA_TYPE_OPTIONS]
+            .filter((v, i, arr) => arr.indexOf(v) === i)
+            .map((t) => (
+              <option key={t} value={t} className="bg-surface">
+                {t}
+              </option>
+            ))}
+        </select>
       </div>
       <label className="flex items-center gap-1 text-[10px] text-muted select-none shrink-0">
         <input
@@ -60,7 +65,6 @@ export default function SchemaNode({ id, data }) {
   const updateNodeData = useEditorStore((s) => s.updateNodeData);
   const commit = (patch) => updateNodeData(id, patch);
   const fields = data.fields || [];
-  const datalistId = `schema-types-${id}`;
 
   const updateField = (fid, patch) =>
     commit({ fields: fields.map((f) => (f.id === fid ? { ...f, ...patch } : f)) });
@@ -72,12 +76,6 @@ export default function SchemaNode({ id, data }) {
 
   return (
     <div className="min-w-[280px] premium-card shadow-sm">
-      <datalist id={datalistId}>
-        {SCHEMA_TYPE_OPTIONS.map((opt) => (
-          <option key={opt} value={opt} />
-        ))}
-      </datalist>
-
       <div className="px-4 py-3 border-b border-theme/50 flex items-center justify-between gap-2">
         <input
           value={data.name}
@@ -98,7 +96,6 @@ export default function SchemaNode({ id, data }) {
             field={f}
             onChange={(patch) => updateField(f.id, patch)}
             onRemove={() => removeField(f.id)}
-            datalistId={datalistId}
           />
         ))}
         <button
