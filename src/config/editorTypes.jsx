@@ -21,6 +21,7 @@ import UseCaseSidebar from '../components/editor/UseCaseSidebar';
 import StateMachineSidebar from '../components/editor/StateMachineSidebar';
 import ArchitectureSidebar from '../components/editor/ArchitectureSidebar';
 import SequenceSidebar from '../components/editor/SequenceSidebar';
+import ApiContractSidebar from '../components/editor/ApiContractSidebar';
 import SequenceCanvas from '../components/editor/SequenceCanvas';
 import { exportSequencePng } from '../utils/sequenceExport';
 
@@ -29,6 +30,9 @@ import FlowchartNode from '../components/editor/FlowchartNode';
 import UseCaseNode from '../components/editor/UseCaseNode';
 import StateMachineNode from '../components/editor/StateMachineNode';
 import ArchitectureNode from '../components/editor/ArchitectureNode';
+import EndpointNode from '../components/editor/EndpointNode';
+import SchemaNode from '../components/editor/SchemaNode';
+import TableRefNode from '../components/editor/TableRefNode';
 import UseCaseEdge from '../components/editor/UseCaseEdge';
 import StateMachineEdge from '../components/editor/StateMachineEdge';
 import ArchitectureEdge from '../components/editor/ArchitectureEdge';
@@ -64,6 +68,15 @@ export const EDITOR_TYPES = {
     addNode: (type, position) => {
       if (type === 'table') useEditorStore.getState().addTable(position);
     },
+    tips: null,
+    overlays: null,
+  },
+  apicontract: {
+    sidebar: ApiContractSidebar,
+    nodeTypes: { endpoint: EndpointNode, schema: SchemaNode, tableref: TableRefNode },
+    edgeTypes: {},
+    defaultEdge: { type: 'smoothstep' },
+    addNode: (type, position) => useEditorStore.getState().addApiNode(type, position),
     tips: null,
     overlays: null,
   },

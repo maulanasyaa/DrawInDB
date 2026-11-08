@@ -10,7 +10,7 @@ import {
 } from '../src/config/diagramTypes.js';
 
 describe('getDiagramType', () => {
-  it.each(['erd', 'flowchart', 'usecase', 'statemachine', 'architecture', 'sequence'])('mengembalikan entri eksak untuk "%s"', (id) => {
+  it.each(['erd', 'apicontract', 'flowchart', 'usecase', 'statemachine', 'architecture', 'sequence'])('mengembalikan entri eksak untuk "%s"', (id) => {
     expect(getDiagramType(id)).toBe(DIAGRAM_TYPES[id]);
   });
 
@@ -24,8 +24,9 @@ describe('getDiagramType', () => {
 });
 
 describe('isGraphType', () => {
-  it('true untuk flowchart, usecase, statemachine & architecture', () => {
+  it('true untuk flowchart, usecase, statemachine, architecture & API Contract', () => {
     expect(isGraphType('flowchart')).toBe(true);
+    expect(isGraphType('apicontract')).toBe(true);
     expect(isGraphType('usecase')).toBe(true);
     expect(isGraphType('statemachine')).toBe(true);
     expect(isGraphType('architecture')).toBe(true);
@@ -76,6 +77,7 @@ describe('registry invariants', () => {
       usecase: 'graph',
       statemachine: 'graph',
       architecture: 'graph',
+      apicontract: 'graph',
       sequence: 'sequence',
     };
     for (const t of DIAGRAM_TYPE_LIST) {
@@ -112,11 +114,11 @@ describe('registry invariants', () => {
     }
   });
 
-  it('export SQL hanya ERD, export JSON hanya Use Case, PNG untuk semua tipe', () => {
+  it('export SQL hanya ERD, export JSON untuk Use Case & API Contract, PNG untuk semua tipe', () => {
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.sql).map((t) => t.id)).toEqual(['erd']);
-    expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.json).map((t) => t.id)).toEqual(['usecase']);
+    expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.json).map((t) => t.id)).toEqual(['apicontract', 'usecase']);
     expect(DIAGRAM_TYPE_LIST.filter((t) => t.exports.png).map((t) => t.id).sort()).toEqual(
-      ['architecture', 'erd', 'flowchart', 'sequence', 'statemachine', 'usecase'],
+      ['apicontract', 'architecture', 'erd', 'flowchart', 'sequence', 'statemachine', 'usecase'],
     );
   });
 
@@ -127,6 +129,7 @@ describe('registry invariants', () => {
   it('DIAGRAM_TYPE_LIST urut erd → … → architecture → sequence (urutan kartu di ProjectDetail)', () => {
     expect(DIAGRAM_TYPE_LIST.map((t) => t.id)).toEqual([
       'erd',
+      'apicontract',
       'flowchart',
       'usecase',
       'statemachine',

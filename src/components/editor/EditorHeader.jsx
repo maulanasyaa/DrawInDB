@@ -18,6 +18,7 @@ import {
   parseUseCaseImport,
 } from "../../utils/useCaseJson";
 import { exportDiagramAsImage } from "../../utils/exportImage";
+import { buildOpenApiExport } from "../../utils/openapiExport";
 import { getDiagramType, isErdType } from "../../config/diagramTypes";
 import { getEditorConfig } from "../../config/editorTypes.jsx";
 
@@ -83,18 +84,16 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
   };
 
   const handleExportJSON = () => {
-    const payload = buildUseCaseExport(
-      diagramMeta,
-      nodes,
-      flowEdges,
-      canvasState,
-    );
+    const payload =
+      diagramMeta?.type === 'apicontract'
+        ? buildOpenApiExport(diagramMeta, nodes, flowEdges)
+        : buildUseCaseExport(diagramMeta, nodes, flowEdges, canvasState);
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.download = `${(diagramMeta.name || "usecase").replace(/\s+/g, "_").toLowerCase()}.usecase.json`;
+    link.download = `${(diagramMeta.name || "usecase").replace(/\s+/g, "_").toLowerCase()}.${diagramMeta?.type === "apicontract" ? "openapi" : "usecase"}.json`;
     link.href = url;
     link.click();
     URL.revokeObjectURL(url);
@@ -273,21 +272,25 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
 
         {typeConfig.exports.json && (
           <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json,.json"
-              onChange={handleImportFile}
-              className="hidden"
-            />
-            <button
-              onClick={handleImportClick}
-              className="flex items-center gap-2 text-muted hover:text-primary px-3 py-1.5 transition-colors rounded-md hover:bg-surface-2 text-xs font-semibold"
-              title="Import from JSON"
-            >
-              <FiUpload className="text-sm" />
-              <span>Import JSON</span>
-            </button>
+            {typeConfig.id === 'usecase' && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={handleImportFile}
+                  className="hidden"
+                />
+                <button
+                  onClick={handleImportClick}
+                  className="flex items-center gap-2 text-muted hover:text-primary px-3 py-1.5 transition-colors rounded-md hover:bg-surface-2 text-xs font-semibold"
+                  title="Import from JSON"
+                >
+                  <FiUpload className="text-sm" />
+                  <span>Import JSON</span>
+                </button>
+              </>
+            )}
             <button
               onClick={handleExportJSON}
               className="flex items-center gap-2 text-muted hover:text-primary px-3 py-1.5 transition-colors rounded-md hover:bg-surface-2 text-xs font-semibold"

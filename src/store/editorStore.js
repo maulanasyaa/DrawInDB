@@ -28,6 +28,10 @@ import { normalizeSequence, pickMessageEndpoints } from '../utils/sequence';
 import { getDiagramType, isGraphType } from '../config/diagramTypes';
 import { CONNECT_STRATEGIES } from '../config/connectStrategies';
 import { ARCH_BOUNDARY_Z, ARCH_EDGE_Z } from '../utils/architectureEdgeLayout';
+import {
+  API_DEFAULT_PATH,
+  API_DEFAULT_SCHEMA_NAME,
+} from '../config/apiContractTypes';
 import { useToastStore } from './toastStore';
 
 /** Id tipe diagram Architecture (registry `diagramTypes.js`). */
@@ -704,6 +708,34 @@ export const useEditorStore = create((set, get) => ({
     } else {
       set({ nodes: [...nodes, newNode] });
     }
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
+  // === API CONTRACT: tambah node ===
+  addApiNode: (kind, position, extraData = {}) => {
+    const { nodes, _vaultPath, _projectId, _filename } = get();
+    let data;
+    let style;
+    if (kind === 'endpoint') {
+      data = { kind, method: 'GET', path: API_DEFAULT_PATH, summary: '', tags: [] };
+      style = { width: 240 };
+    } else if (kind === 'schema') {
+      data = { kind, name: API_DEFAULT_SCHEMA_NAME, fields: [] };
+      style = { width: 240 };
+    } else {
+      data = { kind, erdFilename: '', tableId: '', tableName: '', erdName: '', ...extraData };
+      style = { width: 180 };
+    }
+    const newNode = {
+      id: `api-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'apicontract',
+      position,
+      data,
+      style,
+    };
+    get().commitHistory('action');
+    set({ nodes: [...nodes, newNode] });
     get().markDirty(_vaultPath, _projectId, _filename);
     get().autoSave();
   },
