@@ -90,11 +90,9 @@ function EditorContent() {
 
         {EditorOverlay && <EditorOverlay />}
 
-        <div className="relative flex-1 min-w-0">
-          {editorConfig.tips}
+        {editorConfig.tips}
 
-          {Canvas ? <Canvas /> : <ReactFlowCanvas editorConfig={editorConfig} />}
-        </div>
+        {Canvas ? <Canvas /> : <ReactFlowCanvas editorConfig={editorConfig} />}
       </div>
 
       {/* Dukungan preview SQL dibaca dari registry (`exports.sql`) — hanya ERD. */}

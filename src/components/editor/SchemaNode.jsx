@@ -1,11 +1,33 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
 import { useEditorStore } from '../../store/editorStore';
-import { FiPlus, FiX } from 'react-icons/fi';
+import { FiPlus, FiX, FiChevronDown } from 'react-icons/fi';
 
 const makeFieldId = () => `f-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
+const SCHEMA_TYPE_OPTIONS = [
+  'string',
+  'integer',
+  'number',
+  'boolean',
+  'object',
+  'array',
+  'null',
+  'date-time',
+  'uuid',
+  'email',
+];
+
 function FieldRow({ field, onChange, onRemove }) {
+  const [typeMenuOpen, setTypeMenuOpen] = React.useState(false);
+  const blurTimer = React.useRef(null);
+  const openTypeMenu = () => {
+    clearTimeout(blurTimer.current);
+    setTypeMenuOpen(true);
+  };
+  const closeTypeMenu = () => {
+    blurTimer.current = setTimeout(() => setTypeMenuOpen(false), 120);
+  };
   return (
     <div className="group flex items-center gap-2 px-2.5 py-1.5 bg-base border border-theme rounded-lg hover:border-focus focus-within:border-accent transition-colors">
       <input
@@ -14,13 +36,43 @@ function FieldRow({ field, onChange, onRemove }) {
         placeholder="field"
         className="flex-1 min-w-0 bg-transparent font-mono text-xs text-primary outline-none placeholder:text-muted"
       />
-      <input
-        value={field.type}
-        onChange={(e) => onChange({ type: e.target.value })}
-        placeholder="string"
-        list="api-schema-types"
-        className="w-20 bg-transparent font-mono text-xs text-muted outline-none placeholder:text-muted"
-      />
+      <div className="relative">
+        <input
+          value={field.type}
+          onChange={(e) => onChange({ type: e.target.value })}
+          placeholder="string"
+          onFocus={openTypeMenu}
+          onBlur={closeTypeMenu}
+          className="w-20 bg-transparent font-mono text-xs text-muted outline-none placeholder:text-muted pr-5"
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => (typeMenuOpen ? setTypeMenuOpen(false) : openTypeMenu())}
+          className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted hover:text-primary"
+        >
+          <FiChevronDown className="text-xs" />
+        </button>
+        {typeMenuOpen && (
+          <div className="absolute z-30 top-full right-0 mt-1 w-36 bg-surface border border-theme rounded-lg shadow-xl overflow-hidden py-1">
+            {SCHEMA_TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange({ type: opt });
+                  setTypeMenuOpen(false);
+                }}
+                className="block w-full text-left px-3 py-1.5 text-xs font-mono text-primary hover:bg-hover"
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <label className="flex items-center gap-1 text-[10px] text-muted select-none shrink-0">
         <input
           type="checkbox"
@@ -55,18 +107,6 @@ export default function SchemaNode({ id, data }) {
 
   return (
     <div className="min-w-60 premium-card shadow-sm">
-      <datalist id="api-schema-types">
-        <option value="string" />
-        <option value="integer" />
-        <option value="number" />
-        <option value="boolean" />
-        <option value="object" />
-        <option value="array" />
-        <option value="null" />
-        <option value="date-time" />
-        <option value="uuid" />
-        <option value="email" />
-      </datalist>
       <div className="px-4 py-3 border-b border-theme/50 flex items-center justify-between gap-2">
         <input
           value={data.name}
