@@ -119,6 +119,29 @@ describe('openapiExport', () => {
     expect(doc.paths['/orders'].post.responses['200'].content['application/json'].schema.$ref).toBe('#/components/schemas/Order');
   });
 
+  it('menormalkan nama schema + alias tipe (valid OpenAPI)', () => {
+    const nodes = [
+      { id: 'api-a', type: 'apicontract', position: { x: 0, y: 0 }, data: { kind: 'endpoint', method: 'POST', path: '/register', summary: '', tags: [] } },
+      { id: 'api-b', type: 'apicontract', position: { x: 0, y: 0 }, data: { kind: 'schema', name: 'Register Request', fields: [
+        { id: 'f1', name: 'id', type: 'int', required: true },
+        { id: 'f2', name: 'ok', type: 'bool', required: false },
+        { id: 'f3', name: 'email', type: 'str', required: true },
+        { id: 'f4', name: 'score', type: 'num', required: false },
+        { id: 'f5', name: 'born', type: 'date', required: false },
+      ] } },
+    ];
+    const edges = [{ id: 'e1', source: 'api-a', target: 'api-b', sourceHandle: 'res', data: { kind: 'res' } }];
+    const doc = buildOpenApiExport({ name: 'test', type: 'apicontract' }, nodes, edges);
+    expect(doc.components.schemas.RegisterRequest).toBeTruthy();
+    expect(doc.components.schemas['Register Request']).toBeUndefined();
+    expect(doc.components.schemas.RegisterRequest.properties.id.type).toBe('integer');
+    expect(doc.components.schemas.RegisterRequest.properties.ok.type).toBe('boolean');
+    expect(doc.components.schemas.RegisterRequest.properties.email.type).toBe('string');
+    expect(doc.components.schemas.RegisterRequest.properties.score.type).toBe('number');
+    expect(doc.components.schemas.RegisterRequest.properties.born.type).toBe('date');
+    expect(doc.paths['/register'].post.responses['200'].content['application/json'].schema.$ref).toBe('#/components/schemas/RegisterRequest');
+  });
+
   it('endpoint tanpa schema tetap valid', () => {
     const nodes = [{ id: 'api-1-1', type: 'apicontract', position: { x: 0, y: 0 }, data: { kind: 'endpoint', method: 'GET', path: '/health', summary: '', tags: [] } }];
     const doc = buildOpenApiExport({ name: 'Health', type: 'apicontract' }, nodes, []);

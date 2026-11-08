@@ -4,14 +4,20 @@
  * `data.kind` = 'req' (request body) atau 'res' (response 200). TableRef
  * murni visual (penghubung ke ERD), tidak ikut diekspor.
  */
+const TYPE_ALIASES = { int: 'integer', str: 'string', num: 'number', bool: 'boolean' };
+
+/** Nama schema valid untuk $ref: tanpa spasi (Register Request → RegisterRequest). */
+const safeSchemaName = (raw) => (raw || '').replace(/\s+/g, '') || null;
+
 export function buildOpenApiExport(diagramMeta = {}, nodes = [], edges = []) {
   const paths = {};
   const schemas = {};
 
   const refFor = (targetId) => {
     const target = nodes.find((n) => n.id === targetId);
-    if (!target || target.data?.kind !== 'schema' || !target.data.name) return null;
-    return { $ref: `#/components/schemas/${target.data.name}` };
+    const name = target ? safeSchemaName(target.data?.name) : null;
+    if (!target || target.data?.kind !== 'schema' || !name) return null;
+    return { $ref: `#/components/schemas/${name}` };
   };
 
   for (const n of nodes) {
@@ -46,15 +52,17 @@ export function buildOpenApiExport(diagramMeta = {}, nodes = [], edges = []) {
   }
 
   for (const n of nodes) {
-    if (n.data?.kind !== 'schema' || !n.data.name) continue;
+    if (n.data?.kind !== 'schema') continue;
+    const name = safeSchemaName(n.data?.name);
+    if (!name) continue;
     const properties = {};
     const required = [];
     for (const f of n.data.fields || []) {
       if (!f.name) continue;
-      properties[f.name] = { type: f.type || 'string' };
+      properties[f.name] = { type: TYPE_ALIASES[f.type] || f.type || 'string' };
       if (f.required) required.push(f.name);
     }
-    schemas[n.data.name] = {
+    schemas[name] = {
       type: 'object',
       properties,
       ...(required.length ? { required } : {}),

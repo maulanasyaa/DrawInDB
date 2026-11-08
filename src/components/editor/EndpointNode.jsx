@@ -43,7 +43,7 @@ export default function EndpointNode({ id, data }) {
             commit({ path: e.target.value });
           }}
           placeholder="/api/resource"
-          className="w-full bg-transparent font-mono text-xs text-primary border-b border-theme outline-none focus:border-accent"
+          className="w-full bg-transparent font-mono text-xs text-primary border-b border-theme outline-none focus:border-accent placeholder:text-muted"
         />
         <input
           value={summary}
@@ -52,7 +52,7 @@ export default function EndpointNode({ id, data }) {
             commit({ summary: e.target.value });
           }}
           placeholder="Summary"
-          className="w-full bg-transparent text-xs text-primary border-b border-theme outline-none focus:border-accent"
+          className="w-full bg-transparent text-xs text-primary border-b border-theme outline-none focus:border-accent placeholder:text-muted"
         />
         <input
           value={tags}
@@ -63,7 +63,7 @@ export default function EndpointNode({ id, data }) {
             });
           }}
           placeholder="Tags (comma separated)"
-          className="w-full bg-transparent text-xs text-muted border-b border-theme outline-none focus:border-accent"
+          className="w-full bg-transparent text-xs text-muted border-b border-theme outline-none focus:border-accent placeholder:text-muted"
         />
       </div>
 

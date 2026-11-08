@@ -7,20 +7,20 @@ const makeFieldId = () => `f-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
 function FieldRow({ field, onChange, onRemove }) {
   return (
-    <div className="group flex items-center gap-2 py-1">
+    <div className="group flex items-center gap-2 px-2.5 py-1.5 bg-base border border-theme rounded-lg hover:border-focus focus-within:border-accent transition-colors">
       <input
         value={field.name}
         onChange={(e) => onChange({ name: e.target.value })}
         placeholder="field"
-        className="flex-1 min-w-0 bg-transparent font-mono text-xs text-primary border-b border-theme outline-none focus:border-accent"
+        className="flex-1 min-w-0 bg-transparent font-mono text-xs text-primary outline-none placeholder:text-muted"
       />
       <input
         value={field.type}
         onChange={(e) => onChange({ type: e.target.value })}
         placeholder="string"
-        className="w-16 bg-transparent font-mono text-xs text-muted border-b border-theme outline-none focus:border-accent"
+        className="w-16 bg-transparent font-mono text-xs text-muted outline-none placeholder:text-muted"
       />
-      <label className="flex items-center gap-1 text-[10px] text-muted select-none">
+      <label className="flex items-center gap-1 text-[10px] text-muted select-none shrink-0">
         <input
           type="checkbox"
           checked={!!field.required}
@@ -31,7 +31,7 @@ function FieldRow({ field, onChange, onRemove }) {
       </label>
       <button
         onClick={onRemove}
-        className="text-muted opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity"
+        className="text-muted opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity shrink-0"
       >
         <FiX className="text-sm" />
       </button>
@@ -59,12 +59,12 @@ export default function SchemaNode({ id, data }) {
           value={data.name}
           onChange={(e) => commit({ name: e.target.value })}
           placeholder="Schema"
-          className="font-display text-base font-medium text-primary bg-transparent border-b border-theme outline-none focus:border-accent w-full"
+          className="font-display text-base font-medium text-primary bg-transparent border-b border-theme outline-none focus:border-accent w-full placeholder:text-muted"
         />
         <span className="text-[10px] uppercase tracking-widest text-muted shrink-0">Schema</span>
       </div>
 
-      <div className="px-4 py-2">
+      <div className="px-4 py-2 space-y-1.5">
         {fields.length === 0 && (
           <p className="text-[11px] text-muted py-1">No fields yet.</p>
         )}
