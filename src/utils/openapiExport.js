@@ -6,6 +6,9 @@
  */
 const TYPE_ALIASES = { int: 'integer', str: 'string', num: 'number', bool: 'boolean' };
 
+/** String format JSON Schema — bukan tipe; diekspor sebagai type:string + format. */
+const SCHEMA_FORMATS = new Set(['date-time', 'uuid', 'email']);
+
 /** Nama schema valid untuk $ref: tanpa spasi (Register Request → RegisterRequest). */
 const safeSchemaName = (raw) => (raw || '').replace(/\s+/g, '') || null;
 
@@ -59,7 +62,12 @@ export function buildOpenApiExport(diagramMeta = {}, nodes = [], edges = []) {
     const required = [];
     for (const f of n.data.fields || []) {
       if (!f.name) continue;
-      properties[f.name] = { type: TYPE_ALIASES[f.type] || f.type || 'string' };
+      const rawType = f.type || 'string';
+      if (SCHEMA_FORMATS.has(rawType)) {
+        properties[f.name] = { type: 'string', format: rawType };
+      } else {
+        properties[f.name] = { type: TYPE_ALIASES[rawType] || rawType };
+      }
       if (f.required) required.push(f.name);
     }
     schemas[name] = {

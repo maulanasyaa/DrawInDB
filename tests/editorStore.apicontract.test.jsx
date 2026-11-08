@@ -142,6 +142,22 @@ describe('openapiExport', () => {
     expect(doc.paths['/register'].post.responses['200'].content['application/json'].schema.$ref).toBe('#/components/schemas/RegisterRequest');
   });
 
+  it('format string (date-time/uuid/email) jadi type string + format', () => {
+    const nodes = [
+      { id: 'api-a', type: 'apicontract', position: { x: 0, y: 0 }, data: { kind: 'endpoint', method: 'GET', path: '/x', summary: '', tags: [] } },
+      { id: 'api-b', type: 'apicontract', position: { x: 0, y: 0 }, data: { kind: 'schema', name: 'Fmt', fields: [
+        { id: 'f1', name: 'createdAt', type: 'date-time', required: false },
+        { id: 'f2', name: 'id', type: 'uuid', required: true },
+        { id: 'f3', name: 'contact', type: 'email', required: false },
+      ] } },
+    ];
+    const doc = buildOpenApiExport({ name: 't', type: 'apicontract' }, nodes, []);
+    const props = doc.components.schemas.Fmt.properties;
+    expect(props.createdAt).toEqual({ type: 'string', format: 'date-time' });
+    expect(props.id).toEqual({ type: 'string', format: 'uuid' });
+    expect(props.contact).toEqual({ type: 'string', format: 'email' });
+  });
+
   it('endpoint tanpa schema tetap valid', () => {
     const nodes = [{ id: 'api-1-1', type: 'apicontract', position: { x: 0, y: 0 }, data: { kind: 'endpoint', method: 'GET', path: '/health', summary: '', tags: [] } }];
     const doc = buildOpenApiExport({ name: 'Health', type: 'apicontract' }, nodes, []);
