@@ -7,6 +7,7 @@
 import { addEdge } from 'reactflow';
 import { USECASE_REL_TYPES } from './useCaseTypes';
 import { ARCH_EDGE_Z } from '../utils/architectureEdgeLayout';
+import { API_EDGE_KIND_LABELS } from './apiContractTypes';
 
 const usecase = (connection, { get }) => {
   const relType = get().usecaseRelType || USECASE_REL_TYPES.ASSOCIATION;
@@ -126,4 +127,23 @@ const architecture = (connection, { get }) => {
  */
 const sequence = () => null;
 
-export const CONNECT_STRATEGIES = { erd, flowchart, usecase, statemachine, architecture, sequence };
+const apicontract = (connection, { get }) => {
+  if (connection.source === connection.target) return null;
+  const kind = connection.sourceHandle === 'req' ? 'req' : 'res';
+  const newEdge = {
+    ...connection,
+    id: `api-${connection.source}-${connection.target}-${Date.now()}`,
+    type: 'smoothstep',
+    data: { kind },
+    label: API_EDGE_KIND_LABELS[kind],
+    style: { stroke: '#a1a1aa', strokeWidth: 1.5 },
+    labelStyle: { fill: '#e4e4e7', fontWeight: 600, fontSize: 12 },
+    labelBgStyle: { fill: '#18181b', stroke: '#3f3f46', strokeWidth: 1 },
+    labelBgPadding: [6, 4],
+    labelBgBorderRadius: 4,
+    markerEnd: { type: 'arrowclosed', color: '#a1a1aa' },
+  };
+  return { flowEdges: [...get().flowEdges, newEdge] };
+};
+
+export const CONNECT_STRATEGIES = { erd, flowchart, usecase, statemachine, architecture, sequence, apicontract };

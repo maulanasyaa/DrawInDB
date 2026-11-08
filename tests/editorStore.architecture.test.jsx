@@ -47,6 +47,7 @@ describe('registry Architecture (tipe ke-5)', () => {
   it('terdaftar sebelum sequence di DIAGRAM_TYPE_LIST (fallback getDiagramType tetap ERD)', () => {
     expect(DIAGRAM_TYPE_LIST.map((t) => t.id)).toEqual([
       'erd',
+      'apicontract',
       'flowchart',
       'usecase',
       'statemachine',

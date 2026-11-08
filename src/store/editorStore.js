@@ -27,11 +27,19 @@ import {
 import { normalizeSequence, pickMessageEndpoints } from '../utils/sequence';
 import { getDiagramType, isGraphType } from '../config/diagramTypes';
 import { CONNECT_STRATEGIES } from '../config/connectStrategies';
+import { pushGrownNeighbors } from '../utils/apiLayout';
 import { ARCH_BOUNDARY_Z, ARCH_EDGE_Z } from '../utils/architectureEdgeLayout';
+import {
+  API_DEFAULT_PATH,
+  API_DEFAULT_SCHEMA_NAME,
+} from '../config/apiContractTypes';
 import { useToastStore } from './toastStore';
 
 /** Id tipe diagram Architecture (registry `diagramTypes.js`). */
 const ARCH_TYPE_ID = 'architecture';
+
+/** Ukuran terukur terakhir per node API Contract (guard dorong-tetangga). */
+let lastApiSizes = {};
 
 /**
  * Migrasi non-breaking layer Architecture saat load:
@@ -306,6 +314,7 @@ export const useEditorStore = create((set, get) => ({
       // Normalisasi untuk SEMUA tipe: tipe lain mendapat [] kosong, jadi file
       // rusak/field hilang tidak crash dan state lama tidak terbawa.
       const seq = normalizeSequence(data);
+      lastApiSizes = {};
 
       set({
         diagramMeta: data.meta,
@@ -708,6 +717,34 @@ export const useEditorStore = create((set, get) => ({
     get().autoSave();
   },
 
+  // === API CONTRACT: tambah node ===
+  addApiNode: (kind, position, extraData = {}) => {
+    const { nodes, _vaultPath, _projectId, _filename } = get();
+    let data;
+    let style;
+    if (kind === 'endpoint') {
+      data = { kind, method: 'GET', path: API_DEFAULT_PATH, summary: '', tags: [] };
+      style = { width: 240 };
+    } else if (kind === 'schema') {
+      data = { kind, name: API_DEFAULT_SCHEMA_NAME, fields: [] };
+      style = { width: 280 };
+    } else {
+      data = { kind, erdFilename: '', tableId: '', tableName: '', erdName: '', ...extraData };
+      style = { width: 180 };
+    }
+    const newNode = {
+      id: `api-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'apicontract',
+      position,
+      data,
+      style,
+    };
+    get().commitHistory('action');
+    set({ nodes: [...nodes, newNode] });
+    get().markDirty(_vaultPath, _projectId, _filename);
+    get().autoSave();
+  },
+
   /** Label relationship ("description" + "[technology]"). Satu snapshot per burst. */
   setArchitectureEdgeData: (edgeId, patch) => {
     const { _vaultPath, _projectId, _filename } = get();
@@ -928,6 +965,30 @@ export const useEditorStore = create((set, get) => ({
         );
       }
 
+      // Node membesar karena isi bertambah → dorong tetangga terhubung.
+      if (type === 'apicontract') {
+        for (const ch of changes) {
+          if (ch.type !== 'dimensions' || !ch.dimensions) continue;
+          const dim = ch.dimensions;
+          const prev = lastApiSizes[ch.id];
+          if (!prev) {
+            lastApiSizes[ch.id] = { w: dim.width, h: dim.height };
+            continue;
+          }
+          if (dim.width > prev.w || dim.height > prev.h) {
+            const shifted = pushGrownNeighbors(
+              nextNodes,
+              nextEdges,
+              ch.id,
+              dim.width,
+              dim.height,
+            );
+            if (shifted) nextNodes = shifted;
+          }
+          lastApiSizes[ch.id] = { w: dim.width, h: dim.height };
+        }
+      }
+
       set({ nodes: nextNodes, flowEdges: nextEdges });
     } else {
       set({ tables: applyNodeChanges(changes, get().tables) });
@@ -1010,6 +1071,7 @@ export const useEditorStore = create((set, get) => ({
    */
   cleanup: (token = null) => {
     if (token !== null && token !== get()._loadToken) return;
+    lastApiSizes = {};
     const { _autoSaveTimer } = get();
     if (_autoSaveTimer) {
       clearTimeout(_autoSaveTimer);

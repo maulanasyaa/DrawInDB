@@ -21,6 +21,7 @@ import UseCaseSidebar from '../components/editor/UseCaseSidebar';
 import StateMachineSidebar from '../components/editor/StateMachineSidebar';
 import ArchitectureSidebar from '../components/editor/ArchitectureSidebar';
 import SequenceSidebar from '../components/editor/SequenceSidebar';
+import ApiContractSidebar from '../components/editor/ApiContractSidebar';
 import SequenceCanvas from '../components/editor/SequenceCanvas';
 import { exportSequencePng } from '../utils/sequenceExport';
 
@@ -29,6 +30,7 @@ import FlowchartNode from '../components/editor/FlowchartNode';
 import UseCaseNode from '../components/editor/UseCaseNode';
 import StateMachineNode from '../components/editor/StateMachineNode';
 import ArchitectureNode from '../components/editor/ArchitectureNode';
+import ApiNode from '../components/editor/ApiNode';
 import UseCaseEdge from '../components/editor/UseCaseEdge';
 import StateMachineEdge from '../components/editor/StateMachineEdge';
 import ArchitectureEdge from '../components/editor/ArchitectureEdge';
@@ -41,11 +43,15 @@ import { getDiagramType } from './diagramTypes';
 
 /** Ikon + teks tips dalam satu komponen supaya markup tidak diduplikasi. */
 function Tips({ children, wide = false }) {
+  const isSidebarOpen = useEditorStore((state) => state.isSidebarOpen);
   return (
     <div
-      className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-theme px-5 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs text-secondary animate-fade-in pointer-events-none ${
+      className={`absolute bottom-6 z-40 bg-surface border border-theme px-5 py-2.5 rounded-full shadow-lg flex items-center gap-3 text-xs text-secondary animate-fade-in pointer-events-none ${
         wide ? 'max-w-[560px]' : ''
       }`}
+      style={{
+        left: isSidebarOpen ? '336px' : '16px',
+      }}
     >
       <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-accent">
         <FiInfo className="text-sm" />
@@ -65,6 +71,22 @@ export const EDITOR_TYPES = {
       if (type === 'table') useEditorStore.getState().addTable(position);
     },
     tips: null,
+    overlays: null,
+  },
+  apicontract: {
+    sidebar: ApiContractSidebar,
+    nodeTypes: { apicontract: ApiNode },
+    edgeTypes: {},
+    defaultEdge: { type: 'smoothstep' },
+    addNode: (type, position) => useEditorStore.getState().addApiNode(type, position),
+    tips: (
+      <Tips wide>
+        <strong className="text-primary font-medium">Tips:</strong> Drag from
+        the endpoint's <strong>req</strong>/<strong>res</strong> handle to a
+        schema for request/response; use the sidebar's{' '}
+        <strong>Link ERD Table</strong> to reference tables.
+      </Tips>
+    ),
     overlays: null,
   },
   flowchart: {

@@ -1,6 +1,6 @@
 // Single source of truth untuk tipe diagram. Tambah tipe baru dengan menambah satu entri di sini.
 
-import { FiActivity, FiDatabase, FiGitBranch, FiLayers, FiMessageSquare, FiUsers } from "react-icons/fi";
+import { FiActivity, FiCode, FiDatabase, FiGitBranch, FiLayers, FiMessageSquare, FiUsers } from "react-icons/fi";
 
 export const DIAGRAM_TYPES = {
   erd: {
@@ -15,6 +15,20 @@ export const DIAGRAM_TYPES = {
     dataShape: "tables",
     hasDbType: true,
     exports: { png: true, sql: true, json: false },
+    minimap: true,
+  },
+  apicontract: {
+    id: "apicontract",
+    label: "API Contract",
+    labelPlural: "API Contracts",
+    placeholder: "Orders API",
+    badge: "API",
+    backLabel: "API Contract",
+    description: "Design REST endpoints and JSON schemas, link them to your ERD, and export OpenAPI.",
+    icon: FiCode,
+    dataShape: "graph",
+    hasDbType: false,
+    exports: { png: true, sql: false, json: true },
     minimap: true,
   },
   flowchart: {
