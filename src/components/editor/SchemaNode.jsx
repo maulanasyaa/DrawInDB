@@ -18,7 +18,20 @@ const SCHEMA_TYPE_OPTIONS = [
   'email',
 ];
 
-function FieldRow({ field, onChange, onRemove, menuOpen, onOpenMenu, onToggleMenu, onSelectType }) {
+function FieldRow({ field, onChange, onRemove, menuOpen, onOpenMenu, onToggleMenu, onSelectType, onCloseMenu }) {
+  const menuRefLocal = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e) => {
+      if (menuRefLocal.current && !menuRefLocal.current.contains(e.target)) {
+        onCloseMenu();
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [menuOpen, onCloseMenu]);
+
   return (
     <div className="group flex items-center gap-2 px-2.5 py-1.5 bg-base border border-theme rounded-lg hover:border-focus focus-within:border-accent transition-colors">
       <input
@@ -38,7 +51,10 @@ function FieldRow({ field, onChange, onRemove, menuOpen, onOpenMenu, onToggleMen
         <button
           type="button"
           tabIndex={-1}
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           onClick={onToggleMenu}
           className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted hover:text-primary"
         >
@@ -46,7 +62,7 @@ function FieldRow({ field, onChange, onRemove, menuOpen, onOpenMenu, onToggleMen
         </button>
         {menuOpen && (
           <div
-            ref={menuRef}
+            ref={menuRefLocal}
             data-type-menu
             className="absolute z-30 top-full right-0 mt-1 w-36 bg-surface border border-theme rounded-lg shadow-xl overflow-hidden py-1"
           >
@@ -91,19 +107,6 @@ export default function SchemaNode({ id, data }) {
   const fields = data.fields || [];
 
   const [typeMenuFor, setTypeMenuFor] = React.useState(null);
-  const menuRef = React.useRef(null);
-
-  // Tutup menu saat klik di luar menu (termasuk kanvas/node lain).
-  React.useEffect(() => {
-    if (!typeMenuFor) return;
-    const onPointerDown = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setTypeMenuFor(null);
-      }
-    };
-    window.addEventListener('pointerdown', onPointerDown);
-    return () => window.removeEventListener('pointerdown', onPointerDown);
-  }, [typeMenuFor]);
 
   const updateField = (fid, patch) =>
     commit({ fields: fields.map((f) => (f.id === fid ? { ...f, ...patch } : f)) });
@@ -147,6 +150,7 @@ export default function SchemaNode({ id, data }) {
               updateField(f.id, { type: opt });
               setTypeMenuFor(null);
             }}
+            onCloseMenu={() => setTypeMenuFor(null)}
           />
         ))}
         <button
