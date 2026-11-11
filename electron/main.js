@@ -3,7 +3,6 @@ const path = require('path');
 const fs = require('fs');
 const setupMenu = require('./menu');
 const { assertSafeToTrash } = require('./pathGuard');
-const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let store;
@@ -116,7 +115,6 @@ if (!gotTheLock) {
       mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
       
       // Auto-updater check in production
-      autoUpdater.checkForUpdatesAndNotify();
     }
   }
 
