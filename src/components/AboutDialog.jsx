@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import logo from "../assets/drawindb-logo.png";
 
 const AUTHOR_NAME = "Maulana Syarip Abdurahman";
 const AUTHOR_URL = "https://github.com/maulanasyaa";
@@ -28,9 +29,11 @@ export default function AboutDialog({ onClose }) {
       >
         {/* Header */}
         <div className="flex flex-col items-center pt-10 pb-6 px-6 border-b border-theme">
-          <div className="w-16 h-16 bg-accent text-canvas flex items-center justify-center text-3xl font-bold rounded-2xl mb-4 shadow-xl">
-            D
-          </div>
+          <img
+          src={logo}
+          alt="DrawInDB logo"
+          className="w-16 h-16 rounded-2xl mb-4 shadow-xl"
+        />
           <h2 className="font-display section-title text-primary tracking-tight">DrawInDB</h2>
           <p className="text-secondary text-sm mt-1 font-medium">Versi {version}</p>
         </div>

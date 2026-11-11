@@ -9,6 +9,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import EmptyState from "../components/EmptyState";
 import { collectRecentWork } from "../utils/recentWork";
 import { DIAGRAM_TYPE_LIST, getDiagramType } from "../config/diagramTypes";
+import logo from "../assets/drawindb-logo.png";
 import AboutDialog from "../components/AboutDialog";
 import { FiPlus, FiTrash2, FiChevronRight, FiLayers } from "react-icons/fi";
 
@@ -62,16 +63,7 @@ function SchemaSketch() {
 function Brand() {
   return (
     <div className="flex items-center gap-2 text-primary">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        {[
-          [0.5, 0.5],
-          [9.5, 0.5],
-          [0.5, 9.5],
-          [9.5, 9.5],
-        ].map(([x, y]) => (
-          <rect key={`${x}-${y}`} x={x} y={y} width="6" height="6" stroke="currentColor" />
-        ))}
-      </svg>
+      <img src={logo} alt="DrawInDB logo" className="w-6 h-6 rounded-md" />
       <span className="text-sm font-semibold tracking-tight">DrawInDB</span>
     </div>
   );
