@@ -228,6 +228,14 @@ if (!gotTheLock) {
     }
   });
 
+  // Open external URL in default browser (https only, deny everything else)
+  ipcMain.handle('shell:openExternal', async (event, url) => {
+    if (typeof url === 'string' && url.startsWith('https://')) {
+      await shell.openExternal(url);
+    }
+    return true;
+  });
+
   ipcMain.handle('store:saveRecentVault', async (event, vaultPath) => {
     if (!store) return;
     currentVaultPath = vaultPath; // Track current vault for path validation

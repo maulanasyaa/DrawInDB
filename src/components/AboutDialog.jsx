@@ -1,6 +1,18 @@
 import React from "react";
 import { createPortal } from "react-dom";
 
+const AUTHOR_NAME = "Maulana Syarip Abdurahman";
+const AUTHOR_URL = "https://github.com/maulanasyaa";
+const SAWERIA_URL = "https://saweria.co/maulanasa";
+
+function openExternal(url) {
+  if (window.api?.openExternal) {
+    window.api.openExternal(url);
+  } else {
+    window.open(url, "_blank");
+  }
+}
+
 export default function AboutDialog({ onClose }) {
   // eslint-disable-next-line no-undef
   const version = __APP_VERSION__;
@@ -11,37 +23,46 @@ export default function AboutDialog({ onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-surface border border-theme rounded-2xl w-full max-w-sm p-12 shadow-2xl animate-pop-in flex flex-col items-center text-center relative overflow-hidden"
+        className="bg-surface border border-theme rounded-2xl w-full max-w-sm shadow-2xl animate-pop-in overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="orb orb-mint w-[300px] h-[300px] top-[-150px] mix-blend-multiply" />
-
-        <div className="w-16 h-16 bg-accent text-canvas flex items-center justify-center text-3xl font-bold rounded-2xl mb-6 shadow-xl z-10">
-          D
+        {/* Header */}
+        <div className="flex flex-col items-center pt-10 pb-6 px-6 border-b border-theme">
+          <div className="w-16 h-16 bg-accent text-canvas flex items-center justify-center text-3xl font-bold rounded-2xl mb-4 shadow-xl">
+            D
+          </div>
+          <h2 className="font-display section-title text-primary tracking-tight">DrawInDB</h2>
+          <p className="text-secondary text-sm mt-1 font-medium">Versi {version}</p>
         </div>
-        <h2 className="font-display section-title text-primary tracking-tight z-10 mb-2">
-          DrawInDB
-        </h2>
-        <p className="text-secondary text-sm mb-8 z-10 font-medium">
-          Version {version}
-        </p>
 
-        <p className="text-muted text-sm mb-10 z-10 font-light leading-relaxed">
-          Premium, offline-first visual database modeling.
-          <br />
-          <br />
-          Built with Electron, React & React Flow
-        </p>
+        {/* Body — kredit */}
+        <div className="px-6 py-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-muted text-sm">Dibuat oleh</span>
+            <span className="text-sm font-medium text-primary">{AUTHOR_NAME}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted text-sm">GitHub</span>
+            <button
+              onClick={() => openExternal(AUTHOR_URL)}
+              className="text-sm font-medium text-accent hover:underline"
+            >
+              @maulanasyaa
+            </button>
+          </div>
+        </div>
 
-        <div className="flex w-full justify-between items-center z-10">
-          <a
-            href="#"
-            className="text-secondary hover:text-primary transition-colors text-sm font-medium border-b border-transparent hover:border-primary"
+        {/* Footer */}
+        <div className="px-6 pb-6 flex flex-col gap-2">
+          <button
+            onClick={() => openExternal(SAWERIA_URL)}
+            className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-sm text-white font-semibold transition-colors flex items-center justify-center gap-2"
           >
-            GitHub
-          </a>
-          <button onClick={onClose} className="btn-primary">
-            Close
+            <span>☕</span>
+            <span>Traktir Kopi di Saweria</span>
+          </button>
+          <button onClick={onClose} className="btn-primary w-full">
+            Tutup
           </button>
         </div>
       </div>
