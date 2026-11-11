@@ -60,27 +60,41 @@ function SchemaSketch() {
 }
 
 function Brand() {
+  return (
+    <div className="flex items-center gap-2 text-primary">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        {[
+          [0.5, 0.5],
+          [9.5, 0.5],
+          [0.5, 9.5],
+          [9.5, 9.5],
+        ].map(([x, y]) => (
+          <rect key={`${x}-${y}`} x={x} y={y} width="6" height="6" stroke="currentColor" />
+        ))}
+      </svg>
+      <span className="text-sm font-semibold tracking-tight">DrawInDB</span>
+    </div>
+  );
+}
+
+function BuiltBy() {
   const [aboutOpen, setAboutOpen] = useState(false);
   return (
     <>
-      <div
-        className="flex items-center gap-2 text-primary cursor-pointer select-none"
+      <motion.button
+        type="button"
         onClick={() => setAboutOpen(true)}
-        role="button"
+        className="flex items-center gap-1 text-muted hover:text-primary text-xs font-medium transition-colors select-none"
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+        whileHover={{ scale: 1.04 }}
         title="Tentang DrawInDB"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          {[
-            [0.5, 0.5],
-            [9.5, 0.5],
-            [0.5, 9.5],
-            [9.5, 9.5],
-          ].map(([x, y]) => (
-            <rect key={`${x}-${y}`} x={x} y={y} width="6" height="6" stroke="currentColor" />
-          ))}
-        </svg>
-        <span className="text-sm font-semibold tracking-tight">DrawInDB</span>
-      </div>
+        <span>Built with</span>
+        <span className="text-danger animate-pulse">❤️</span>
+        <span>by Maulana Syarip Abdurahman</span>
+      </motion.button>
       {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
     </>
   );
@@ -250,6 +264,9 @@ function Landing({ isLoading, error, onOpen, onCreate }) {
       <div className="absolute top-8 left-8 z-10">
         <Brand />
       </div>
+      <div className="absolute top-8 right-8 z-10">
+        <BuiltBy />
+      </div>
 
       <div className="relative z-10 w-full max-w-3xl mx-auto px-8 py-24 flex flex-col items-center">
         <div className="text-center mb-14 flex flex-col items-center">
@@ -379,13 +396,16 @@ function VaultView({ vault, onSwitch, onNewProject, onDelete, error }) {
               {plural(projectCount, "project", "projects")}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onSwitch}
-            className="btn-secondary shrink-0 text-xs py-2 px-4"
-          >
-            Switch vault
-          </button>
+          <div className="flex flex-col items-end gap-3 shrink-0">
+            <BuiltBy />
+            <button
+              type="button"
+              onClick={onSwitch}
+              className="btn-secondary text-xs py-2 px-4"
+            >
+              Switch vault
+            </button>
+          </div>
         </header>
 
         {error && (
