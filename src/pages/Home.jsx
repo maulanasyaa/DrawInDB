@@ -63,8 +63,8 @@ function SchemaSketch() {
 function Brand() {
   return (
     <div className="flex items-center gap-2 text-primary">
-      <img src={logo} alt="DrawInDB logo" className="w-6 h-6 rounded-md" />
-      <span className="text-sm font-semibold tracking-tight">DrawInDB</span>
+      <img src={logo} alt="DrawInDB logo" className="w-9 h-9 rounded-lg" />
+      <span className="text-lg font-semibold tracking-tight">DrawInDB</span>
     </div>
   );
 }
