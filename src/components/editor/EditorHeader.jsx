@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useReactFlow } from "reactflow";
 import { useEditorStore } from "../../store/editorStore";
@@ -12,7 +12,6 @@ import {
   FiCornerUpRight,
   FiCode,
   FiNavigation,
-  FiInfo,
 } from "react-icons/fi";
 import {
   buildUseCaseExport,
@@ -22,13 +21,11 @@ import { exportDiagramAsImage } from "../../utils/exportImage";
 import { buildOpenApiExport } from "../../utils/openapiExport";
 import { getDiagramType, isErdType } from "../../config/diagramTypes";
 import { getEditorConfig } from "../../config/editorTypes.jsx";
-import AboutDialog from "../AboutDialog";
 
 export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPreview }) {
   const navigate = useNavigate();
   const { projectId } = useParams();
   const fileInputRef = useRef(null);
-  const [aboutOpen, setAboutOpen] = useState(false);
   const { getNodes } = useReactFlow();
 
   const diagramMeta = useEditorStore((state) => state.diagramMeta);
@@ -152,7 +149,6 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
   };
 
   return (
-    <>
     <div className="h-14 border-b border-theme bg-surface flex items-center justify-between px-4 z-20 shrink-0">
       <div className="flex items-center gap-4">
         <button
@@ -307,14 +303,6 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
         )}
 
         <button
-          onClick={() => setAboutOpen(true)}
-          className="p-1.5 rounded-md text-muted hover:text-primary hover:bg-surface-2 transition-colors"
-          title="Tentang DrawInDB"
-          aria-label="Tentang DrawInDB"
-        >
-          <FiInfo className="text-sm" />
-        </button>
-        <button
           onClick={saveDiagram}
           disabled={!isDirty}
           className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${
@@ -328,8 +316,5 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
         </button>
       </div>
     </div>
-
-    {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
-    </>
   );
 }

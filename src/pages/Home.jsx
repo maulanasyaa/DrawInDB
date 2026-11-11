@@ -9,6 +9,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import EmptyState from "../components/EmptyState";
 import { collectRecentWork } from "../utils/recentWork";
 import { DIAGRAM_TYPE_LIST, getDiagramType } from "../config/diagramTypes";
+import AboutDialog from "../components/AboutDialog";
 import { FiPlus, FiTrash2, FiChevronRight, FiLayers } from "react-icons/fi";
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -59,20 +60,29 @@ function SchemaSketch() {
 }
 
 function Brand() {
+  const [aboutOpen, setAboutOpen] = useState(false);
   return (
-    <div className="flex items-center gap-2 text-primary">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        {[
-          [0.5, 0.5],
-          [9.5, 0.5],
-          [0.5, 9.5],
-          [9.5, 9.5],
-        ].map(([x, y]) => (
-          <rect key={`${x}-${y}`} x={x} y={y} width="6" height="6" stroke="currentColor" />
-        ))}
-      </svg>
-      <span className="text-sm font-semibold tracking-tight">DrawInDB</span>
-    </div>
+    <>
+      <div
+        className="flex items-center gap-2 text-primary cursor-pointer select-none"
+        onClick={() => setAboutOpen(true)}
+        role="button"
+        title="Tentang DrawInDB"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          {[
+            [0.5, 0.5],
+            [9.5, 0.5],
+            [0.5, 9.5],
+            [9.5, 9.5],
+          ].map(([x, y]) => (
+            <rect key={`${x}-${y}`} x={x} y={y} width="6" height="6" stroke="currentColor" />
+          ))}
+        </svg>
+        <span className="text-sm font-semibold tracking-tight">DrawInDB</span>
+      </div>
+      {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
+    </>
   );
 }
 
