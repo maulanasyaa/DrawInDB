@@ -1,6 +1,6 @@
 {
   "name": "drawindb",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Offline ERD Tool",
   "main": "electron/main.js",
   "scripts": {
