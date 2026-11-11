@@ -9,7 +9,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import EmptyState from "../components/EmptyState";
 import { collectRecentWork } from "../utils/recentWork";
 import { DIAGRAM_TYPE_LIST, getDiagramType } from "../config/diagramTypes";
-import logo from "../assets/drawindb-logo.png";
+import logo from "../assets/drawindb-logo-clear.png";
 import AboutDialog from "../components/AboutDialog";
 import { FiPlus, FiTrash2, FiChevronRight, FiLayers } from "react-icons/fi";
 
@@ -63,7 +63,7 @@ function SchemaSketch() {
 function Brand() {
   return (
     <div className="flex items-center gap-2 text-primary">
-      <img src={logo} alt="DrawInDB logo" className="w-9 h-9 rounded-lg" />
+      <img src={logo} alt="DrawInDB logo" className="w-11 h-11" />
       <span className="text-lg font-semibold tracking-tight">DrawInDB</span>
     </div>
   );
