@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Mac
+        run: npm run build:mac
+        env:
+          ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: true
+
+      - name: Upload Mac artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-builds
+          path: release/*.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows
+        run: npm run build:win
+        env:
+          ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: true
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: release/*.exe
+
+  release:
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Mac builds
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-builds
+          path: artifacts/mac
+
+      - name: Download Windows builds
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-builds
+          path: artifacts/win
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/mac/*.dmg
+            artifacts/win/*.exe
+          generate_release_notes: false
+          body: |
+            ## DrawInDB ${{ github.ref_name }}
+
+            Aplikasi desktop offline untuk pemodelan database visual (ERD, Flowchart, Use Case, State Machine, Architecture, Sequence, API Contract).
+
+            ### Download
+
+            | Platform | File |
+            |---|---|
+            | macOS Apple Silicon (M1/M2/M3) | `DrawInDB-*-arm64.dmg` |
+            | macOS Intel | `DrawInDB-*.dmg` |
+            | Windows | `DrawInDB-Setup-*.exe` |
+
+            ### Catatan Instalasi
+
+            **macOS** — Karena aplikasi tidak di-sign (unsigned), jika muncul peringatan _"unidentified developer"_:
+            Jalankan di Terminal setelah install:
+            ```
+            xattr -cr /Applications/DrawInDB.app
+            ```
+            lalu buka aplikasi dari Launchpad/Finder. Kalau masih tertahan, Klik kanan file DMG → **Open** → **Open Anyway**.
+
+            **Windows** — Jika muncul SmartScreen:
+            Klik **More info** → **Run anyway**

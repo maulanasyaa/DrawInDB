@@ -34,7 +34,7 @@ DrawInDB operates on "Vaults" instead of cloud accounts. A Vault is simply a sta
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/drawindb.git
+git clone https://github.com/maulanasyaa/DrawInDB.git
 cd drawindb
 
 # Install dependencies
@@ -61,7 +61,24 @@ npm run dist:win
 ```
 Output will be in `release/` (e.g., `DrawInDB-Setup-1.0.0.exe`).
 
-*Note: For official distribution, code signing configurations must be added to the `electron-builder.yml` file.*
+## Installation
+
+DrawInDB didistribusikan tanpa code signing (unsigned). Karena itu, sistem operasi mungkin menampilkan peringatan keamanan saat pertama kali membuka aplikasi — ini normal.
+
+**macOS**
+1. Buka file `.dmg`, seret **DrawInDB.app** ke folder Applications.
+2. Jika muncul peringatan _"unidentified developer"_, jalankan di Terminal:
+   ```bash
+   xattr -cr /Applications/DrawInDB.app
+   ```
+   Lalu buka aplikasi dari Launchpad/Finder.
+3. Alternatif: klik kanan file DMG → **Open** → **Open Anyway**.
+
+**Windows**
+1. Jalankan installer `DrawInDB-Setup-*.exe`.
+2. Jika muncul SmartScreen, klik **More info** → **Run anyway**.
+
+> Catatan: aplikasi tidak melakukan auto-update. Unduh versi terbaru dari halaman [Releases](https://github.com/maulanasyaa/DrawInDB/releases).
 
 ## License
 MIT License
