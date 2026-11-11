@@ -1,5 +1,7 @@
 <div align="center">
 
+  <img src="src/assets/drawindb-logo-clear.png" width="110" alt="DrawInDB logo" />
+
   <h1>🗄️ DrawInDB</h1>
 
   <p>Offline, native desktop app for visually designing databases — local-first, no cloud.</p>
@@ -33,9 +35,9 @@
 
 | Platform | Download |
 |---|---|
-| macOS (Apple Silicon) | [DrawInDB-1.0.0-arm64.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
-| macOS (Intel) | [DrawInDB-1.0.0.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
-| Windows | [DrawInDB.Setup.1.0.0.exe](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
+| macOS (Apple Silicon) | [DrawInDB-1.0.1-arm64.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
+| macOS (Intel) | [DrawInDB-1.0.1.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
+| Windows | [DrawInDB.Setup.1.0.1.exe](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
 
 > **Note:** DrawInDB is not code-signed. You may need to bypass OS security warnings on first launch.
 
