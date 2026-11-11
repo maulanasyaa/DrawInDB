@@ -1,46 +1,117 @@
-# DrawInDB
+<div align="center">
 
-[![CI](https://github.com/maulanasyaa/DrawInDB/actions/workflows/ci.yml/badge.svg)](https://github.com/maulanasyaa/DrawInDB/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/maulanasyaa/DrawInDB?label=Release)](https://github.com/maulanasyaa/DrawInDB/releases)
+  <h1>🗄️ DrawInDB</h1>
 
-DrawInDB is an offline, native desktop application for visually designing databases — an open alternative to drawDB, built local-first. All data stays on your machine in a **Vault** (a plain folder), so it is easy to back up, track with Git, or sync via Dropbox/iCloud.
+  <p>Offline, native desktop app for visually designing databases — local-first, no cloud.</p>
 
-## Features
+  [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+  [![GitHub last commit](https://img.shields.io/github/last-commit/maulanasyaa/DrawInDB)](https://github.com/maulanasyaa/DrawInDB/commits/main)
+  [![Build Status](https://img.shields.io/github/actions/workflow/status/maulanasyaa/DrawInDB/ci.yml?branch=main)](https://github.com/maulanasyaa/DrawInDB/actions)
 
-- **7 diagram types**: ERD, Flowchart, Use Case, State Machine, Architecture, Sequence, and API Contract (OpenAPI)
-- **SQL generation** for MySQL/MariaDB, PostgreSQL, SQLite, and generic SQL with a live preview panel
-- **Export**: PNG image, SQL, and JSON (import/export for Use Case & OpenAPI)
-- **Vaults**: local folders, zero cloud dependency, Git-friendly JSON files
-- **Docs**: built-in PRD documents with editable sections and user stories
-- Keyboard shortcuts, dark/light theme, undo/redo, minimap
+  <br/>
 
-## Tech Stack
+  <a href="#️-download">Download</a> •
+  <a href="#-features">Features</a> •
+  <a href="#-tech-stack">Tech Stack</a> •
+  <a href="#-getting-started">Getting Started</a> •
+  <a href="#-testing--build">Testing & Build</a> •
+  <a href="#-license">License</a>
 
-| Layer | Tech |
+  <br/>
+
+</div>
+
+---
+
+**DrawInDB** adalah aplikasi desktop untuk memvisualisasikan desain database secara offline. Diagram dan dokumen disimpan sebagai file JSON lokal di dalam **Vault** (folder pilihan Anda), sehingga data sepenuhnya milik Anda dan mudah dilacak dengan Git, di-backup, atau disinkronkan via Dropbox/iCloud.
+
+---
+![Downloads](https://img.shields.io/github/downloads/maulanasyaa/DrawInDB/total?style=flat&label=Downloads)
+---
+
+## ⬇️ Download
+
+| Platform | Download |
 |---|---|
-| Desktop shell | Electron 30 |
-| Frontend | React 18, Vite 5 |
-| Styling | Tailwind CSS v4 |
-| State | Zustand 4 |
-| Canvas | React Flow 11 |
-| Storage | electron-store + JSON file vaults |
-| Packaging | electron-builder 24 |
+| macOS (Apple Silicon) | [DrawInDB-1.0.0-arm64.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
+| macOS (Intel) | [DrawInDB-1.0.0.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
+| Windows | [DrawInDB.Setup.1.0.0.exe](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
 
-## Getting Started
+> **Note:** DrawInDB is not code-signed. You may need to bypass OS security warnings on first launch.
+
+### macOS
+
+Run the following command in Terminal after installing:
 
 ```bash
+xattr -cr /Applications/DrawInDB.app
+```
+
+### Windows
+
+Click **"More info"** → **"Run anyway"** when the SmartScreen prompt appears.
+
+---
+
+## ✨ Features
+
+### 🎨 Diagram Types
+- **ERD** — Model database relasional dengan dukungan SQL generator (MySQL/MariaDB, PostgreSQL, SQLite, Generic).
+- **Flowchart & Use Case** — Buat alur proses dan use case diagram.
+- **State Machine** — Model state, transisi, dan choice.
+- **Architecture** — Gambarkan sistem, kontainer, dan batasan (boundary).
+- **Sequence** — Diagram urutan dengan participants, messages, dan option.
+- **API Contract (OpenAPI)** — Desain skema endpoint, export/import OpenAPI.
+
+### ⚡ Productivity
+- **SQL Preview** — Lihat hasil `CREATE TABLE` secara real-time.
+- **Export PNG** — Ekspor diagram sebagai gambar.
+- **Docs / PRD** — Dokumen PRD per project dengan sections dan user stories.
+
+### 🔒 Privacy & Data Control
+- **100% Offline-First** — Semua data tersimpan lokal di mesin Anda, tanpa cloud pihak ketiga.
+- **Vaults** — Folder biasa + metadata `.drawindb/config.json`; data diagram berupa `.json` mentah yang Git-friendly.
+- **Export/Import JSON** — Pindahkan diagram antar perangkat dengan mudah.
+
+### 🎨 Premium Experience
+- **Fluid Animations** — Transisi halus didukung Framer Motion.
+- **Dark/Light Theme** — Dukungan tema penuh.
+- **Keyboard Shortcuts** — Navigasi cepat untuk save, duplicate, zoom, dan lainnya.
+
+---
+
+## 🛠 Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Core | [Electron](https://www.electronjs.org/) |
+| Frontend | [React](https://reactjs.org/) + [Vite](https://vitejs.dev/) |
+| Styling | [Tailwind CSS](https://tailwindcss.com/) |
+| State Management | [Zustand](https://github.com/pmndrs/zustand) |
+| Canvas | [React Flow](https://reactflow.dev/) |
+| Storage | electron-store + JSON file vaults |
+| Testing | [Vitest](https://vitest.dev/) |
+| Packaging | [electron-builder](https://www.electron.build/) |
+
+---
+
+## 🚀 Getting Started
+
+```bash
+# 1. Clone the repository
 git clone https://github.com/maulanasyaa/DrawInDB.git
 cd DrawInDB
+
+# 2. Install dependencies
 npm install
 
-# Dev: Vite dev server + Electron
+# 3. Start development server (Vite + Electron)
 npm run dev
 ```
 
-> Note: `npm run dev` starts Vite (port 5173) and waits before launching Electron.
+---
 
-## Testing & Building
+## 🧪 Testing & Build
 
 ```bash
 # Run the full test suite (Vitest)
@@ -53,47 +124,22 @@ npm run test:coverage
 npm run build
 ```
 
-## Build & Distribution
+---
 
-Packaging is handled by `electron-builder`; artifacts are written to `release/`.
+## 📦 Packaging & Build
 
-| Platform | Command |
-|---|---|
-| macOS (DMG, arm64 + x64) | `npm run dist:mac` |
-| Windows (NSIS installer) | `npm run dist:win` |
+```bash
+# Build for macOS (DMG, arm64 + x64) — requires macOS
+npm run dist:mac
 
-On every tag `v*`, GitHub Actions builds both installers and attaches them to a GitHub Release automatically — see [Releases](https://github.com/maulanasyaa/DrawInDB/releases).
+# Build for Windows (NSIS installer)
+npm run dist:win
+```
 
-## Installation
+Pada setiap tag `v*`, GitHub Actions otomatis membangun kedua installer dan menempelkannya ke GitHub Release — lihat [Releases](https://github.com/maulanasyaa/DrawInDB/releases).
 
-DrawInDB is distributed **unsigned**, so your OS may show a security warning on first launch — this is expected.
+---
 
-**macOS**
-1. Open the `.dmg`, drag **DrawInDB.app** into Applications.
-2. If you see _"unidentified developer"_, run in Terminal:
-   ```bash
-   xattr -cr /Applications/DrawInDB.app
-   ```
-   Then open the app from Launchpad/Finder.
-3. Alternative: right-click the DMG → **Open** → **Open Anyway**.
-
-**Windows**
-1. Run `DrawInDB-Setup-*.exe`.
-2. If SmartScreen appears, click **More info** → **Run anyway**.
-
-> No auto-update yet — download the latest version from [Releases](https://github.com/maulanasyaa/DrawInDB/releases).
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Ctrl+S` / `Cmd+S` | Save diagram |
-| `Ctrl+\` / `Cmd+\` | Toggle sidebar |
-| `Ctrl+D` / `Cmd+D` | Duplicate selected table |
-| `Delete` / `Backspace` | Delete selected table/relationship |
-| `Escape` | Deselect all / close panels |
-| `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Zoom control |
-
-## License
+## 📄 License
 
 [MIT](LICENSE) © 2026 Maulana Syarip Abdurahman
