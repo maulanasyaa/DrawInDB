@@ -16,4 +16,5 @@ contextBridge.exposeInMainWorld('api', {
   saveRecentVault: (vaultPath) => ipcRenderer.invoke('store:saveRecentVault', vaultPath),
   setCurrentVaultPath: (vaultPath) => ipcRenderer.invoke('vault:setCurrentPath', vaultPath),
   setWindowTitle: (title) => ipcRenderer.invoke('window:setTitle', title),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 });

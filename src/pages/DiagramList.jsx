@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import BackButton from "../components/BackButton";
 import { DateTime } from "luxon";
 import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
@@ -11,7 +12,6 @@ import { getDiagramType, DIAGRAM_TYPES } from "../config/diagramTypes";
 import {
   FiArrowRight,
   FiPlus,
-  FiArrowLeft,
   FiEdit2,
   FiCheck,
   FiCopy,
@@ -221,12 +221,10 @@ export default function DiagramList() {
       >
         <div className="flex flex-col mb-16">
           <div className="flex items-center gap-2 text-[10px] font-bold text-muted uppercase tracking-[0.2em] mb-1">
-            <button
+            <BackButton
               onClick={() => navigate(`/project/${projectId}`)}
-              className="hover:text-primary transition-colors flex items-center gap-1.5"
-            >
-              <FiArrowLeft className="text-sm mr-1" /> Back
-            </button>
+              label="Back"
+            />
             <span className="opacity-30">/</span>
             <span className="text-secondary opacity-80">
               {currentVault.name}

@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useReactFlow } from "reactflow";
 import { useEditorStore } from "../../store/editorStore";
 import {
-  FiArrowLeft,
   FiSave,
   FiDownload,
   FiUpload,
@@ -21,6 +20,7 @@ import { exportDiagramAsImage } from "../../utils/exportImage";
 import { buildOpenApiExport } from "../../utils/openapiExport";
 import { getDiagramType, isErdType } from "../../config/diagramTypes";
 import { getEditorConfig } from "../../config/editorTypes.jsx";
+import BackButton from "../BackButton";
 
 export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPreview }) {
   const navigate = useNavigate();
@@ -151,13 +151,11 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
   return (
     <div className="h-14 border-b border-theme bg-surface flex items-center justify-between px-4 z-20 shrink-0">
       <div className="flex items-center gap-4">
-        <button
+        <BackButton
           onClick={() => navigate(`/project/${projectId}/${type}`)}
-          className="w-8 h-8 flex items-center justify-center text-muted hover:text-primary hover:bg-base rounded-md transition-colors"
+          label="Back"
           title={`Back to ${backLabel} list`}
-        >
-          <FiArrowLeft />
-        </button>
+        />
 
         <div className="flex items-center gap-3">
           <h1 className="font-display font-semibold text-primary">

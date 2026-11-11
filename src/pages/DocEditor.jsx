@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { FiArrowLeft, FiDownload, FiSave } from "react-icons/fi";
+import BackButton from "../components/BackButton";
+import { FiDownload, FiSave } from "react-icons/fi";
 import { useVaultStore } from "../store/vaultStore";
 import { useDocStore } from "../store/docStore";
 import { docToMarkdown } from "../utils/prd";
@@ -97,13 +98,11 @@ export default function DocEditor() {
     <div className="flex flex-col h-screen w-full bg-base overflow-hidden">
       <div className="h-14 border-b border-theme bg-surface flex items-center justify-between px-4 z-20 shrink-0">
         <div className="flex items-center gap-4">
-          <button
+          <BackButton
             onClick={() => navigate(`/project/${projectId}`)}
-            className="w-8 h-8 flex items-center justify-center text-muted hover:text-primary hover:bg-base rounded-md transition-colors"
+            label="Back"
             title="Back to project"
-          >
-            <FiArrowLeft />
-          </button>
+          />
 
           <div className="flex items-center gap-3">
             <h1 className="font-display font-semibold text-primary">{doc.meta.name}</h1>

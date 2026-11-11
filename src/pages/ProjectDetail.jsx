@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import BackButton from "../components/BackButton";
 import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { DateTime } from "luxon";
@@ -7,7 +8,7 @@ import { useVaultStore } from "../store/vaultStore";
 import { useToastStore } from "../store/toastStore";
 import ConfirmDialog from "../components/ConfirmDialog";
 import EmptyState from "../components/EmptyState";
-import { FiArrowLeft, FiPlus, FiEdit2, FiCheck, FiFileText, FiTrash2 } from "react-icons/fi";
+import { FiPlus, FiEdit2, FiCheck, FiFileText, FiTrash2 } from "react-icons/fi";
 import { FiX as FiClose } from "react-icons/fi";
 import { DIAGRAM_TYPE_LIST } from "../config/diagramTypes";
 
@@ -146,12 +147,10 @@ export default function ProjectDetail() {
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2 text-[10px] font-bold text-muted uppercase tracking-[0.2em] mb-1">
-                <button
+                <BackButton
                   onClick={() => navigate("/")}
-                  className="hover:text-primary transition-colors flex items-center gap-1.5"
-                >
-                  <FiArrowLeft className="text-sm mr-1" /> Vaults
-                </button>
+                  label="Vaults"
+                />
                 <span className="opacity-30">/</span>
                 <span className="text-secondary opacity-80">
                   {currentVault.name}
