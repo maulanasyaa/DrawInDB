@@ -35,9 +35,9 @@
 
 | Platform | Download |
 |---|---|
-| macOS (Apple Silicon) | [DrawInDB-1.0.1-arm64.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
-| macOS (Intel) | [DrawInDB-1.0.1.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
-| Windows | [DrawInDB.Setup.1.0.1.exe](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
+| macOS (Apple Silicon) | [DrawInDB-1.1.0-arm64.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
+| macOS (Intel) | [DrawInDB-1.1.0.dmg](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
+| Windows | [DrawInDB.Setup.1.1.0.exe](https://github.com/maulanasyaa/DrawInDB/releases/latest) |
 
 > **Note:** DrawInDB is not code-signed. You may need to bypass OS security warnings on first launch.
 
