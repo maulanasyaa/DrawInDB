@@ -94,6 +94,9 @@ export default function ArchitectureEdge({
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: 'all',
+              // Pastikan label berada DI ATAS SVG edge (ARCH_EDGE_Z = 1),
+              // supaya garis tidak menggambar di atas box label.
+              zIndex: 10,
             }}
             className={`nodrag nopan ${
               placeholder ? 'arch-edge-placeholder' : ''
