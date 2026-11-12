@@ -50,7 +50,7 @@ function Tips({ children, wide = false }) {
         wide ? 'max-w-[560px]' : ''
       }`}
       style={{
-        left: isSidebarOpen ? '336px' : '16px',
+        left: isSidebarOpen ? '388px' : '66px',
       }}
     >
       <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center text-accent">

@@ -26,6 +26,7 @@ export default function ReactFlowCanvas({ editorConfig }) {
   const updateCanvas = useEditorStore((state) => state.updateCanvas);
   const setSelectedTable = useEditorStore((state) => state.setSelectedTable);
   const showMinimap = useEditorStore((state) => state.showMinimap);
+  const isSidebarOpen = useEditorStore((state) => state.isSidebarOpen);
 
   const isNodeBased = isGraphType(diagramType);
   const addNode = editorConfig.addNode;
@@ -101,7 +102,12 @@ export default function ReactFlowCanvas({ editorConfig }) {
         className="bg-canvas"
       >
         <Background color="var(--dot-color)" gap={24} size={1} />
-        <Controls className="shadow-lg" />
+        <Controls
+          className="shadow-lg"
+          style={{
+            left: isSidebarOpen ? '332px' : '10px',
+          }}
+        />
         {minimapEnabled && (
           <MiniMap
             nodeColor="var(--text-muted)"
