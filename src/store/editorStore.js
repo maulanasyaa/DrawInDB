@@ -144,6 +144,9 @@ export const useEditorStore = create((set, get) => ({
   showMinimap: false,
   setShowMinimap: (v) => set({ showMinimap: v }),
 
+  // Sidebar (session-only, not persisted, not in history)
+  toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
+
   // State khusus Use Case: relationship type yang aktif untuk koneksi baru
   usecaseRelType: USECASE_REL_TYPES.ASSOCIATION,
   setUseCaseRelType: (relType) => set({ usecaseRelType: relType }),
