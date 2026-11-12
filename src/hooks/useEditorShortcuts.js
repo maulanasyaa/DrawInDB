@@ -16,6 +16,12 @@ export function useEditorShortcuts() {
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
   const flush = useEditorStore((state) => state.flush);
+  const toggleSidebar = useEditorStore((state) => state.toggleSidebar);
+
+  useHotkeys('mod+b, ctrl+b', (e) => {
+    e.preventDefault();
+    toggleSidebar();
+  });
 
   useHotkeys('mod+z, ctrl+z', (e) => {
     e.preventDefault();
