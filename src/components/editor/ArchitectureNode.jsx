@@ -133,18 +133,17 @@ export default function ArchitectureNode({ id, data, selected }) {
   }
 
   // ===== boundary: kotak garis putus-putus berjudul (pengelompok) =====
-  // Wrapper node sudah `pointer-events: none` (store). Badan boundary juga
-  // `none` supaya klik jatuh ke edge/node di atasnya; hanya HEADER (label),
-  // TEPI (strip 6px), handle, dan NodeResizer yang `auto` — boundary tetap
-  // bisa dipilih, dipindah, dan di-resize. `opacity` tidak dipasang di node
-  // (akan ikut memudarkan edge/anak di atasnya); kepudaran ada di lapisan isi.
+  // Boundary adalah lapisan belakang (zIndex negatif), jadi konten (node/edge)
+  // di atasnya tetap menangkap klik duluan. Seluruh BADAN boundary dibuat
+  // `pointer-events: auto` supaya mudah dipilih & digeser dengan klik di mana
+  // saja — bukan hanya strip tepi 6px. Handles/NodeResizer tetap jalan.
   if (subtype === ARCH_NODE_TYPES.BOUNDARY) {
     return (
       <div className="w-full h-full relative group">
         {resizer}
 
         <div
-          className="absolute inset-0 rounded-lg z-0 pointer-events-none"
+          className="absolute inset-0 rounded-lg z-0 pointer-events-auto cursor-grab"
           style={{ backgroundColor: 'var(--bg-surface)', opacity: 0.35 }}
         />
 
@@ -153,14 +152,6 @@ export default function ArchitectureNode({ id, data, selected }) {
             selected ? 'border-focus' : 'border-theme group-hover:border-focus/50'
           }`}
         />
-
-        {/* Tepi: satu-satunya area badan yang menangkap klik (pilih + geser). */}
-        <div className="absolute inset-0 z-0 pointer-events-none">
-          <div className="absolute inset-x-0 top-0 h-1.5 pointer-events-auto cursor-grab" />
-          <div className="absolute inset-x-0 bottom-0 h-1.5 pointer-events-auto cursor-grab" />
-          <div className="absolute inset-y-0 left-0 w-1.5 pointer-events-auto cursor-grab" />
-          <div className="absolute inset-y-0 right-0 w-1.5 pointer-events-auto cursor-grab" />
-        </div>
 
         <div className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center pointer-events-none z-10">
           <AutoTextarea
