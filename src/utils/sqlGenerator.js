@@ -1,3 +1,5 @@
+import { LENGTH_TYPES } from '../config/dbTypes.js';
+
 export function generateSQL(diagram) {
   if (!diagram || !diagram.tables) return '';
 
@@ -34,7 +36,7 @@ export function generateTableSQL(tableData, dbType, relationships = [], allTable
   const singlePk = tableData.columns.filter(c => c.pk).length === 1;
 
   for (const col of tableData.columns) {
-    let line = `  ${escapeIdentifier(col.name, dbType)} ${formatType(col.type, dbType)}`;
+    let line = `  ${escapeIdentifier(col.name, dbType)} ${formatType(col.type, dbType, col.length)}`;
 
     // PG SERIAL/BIGSERIAL = shorthand PK tunggal (INTEGER/BIGINT PK, atau tipe
     // SERIAL/BIGSERIAL yang dipilih eksplisit). Sudah inline, jadi tidak boleh
@@ -134,14 +136,16 @@ function escapeIdentifier(name, dbType) {
   }
 }
 
-function formatType(type, dbType) {
+function formatType(type, dbType, length) {
   let t = type.toUpperCase();
   if (t === 'INT' && (dbType === 'postgresql' || dbType === 'sqlite' || dbType === 'generic')) return 'INTEGER';
   if (t === 'DATETIME' && dbType === 'postgresql') return 'TIMESTAMP';
   if (t === 'DATETIME' && dbType === 'sqlite') return 'TEXT';
   // SQLite type affinities
   if (dbType === 'sqlite' && t.includes('VARCHAR')) return 'TEXT';
-  if (t.includes('VARCHAR') && !t.includes('(')) return 'VARCHAR(255)';
+  const hasLength = length !== undefined && length !== null && String(length).trim() !== '';
+  if (t === 'VARCHAR' && !hasLength) return 'VARCHAR(255)';
+  if (hasLength && LENGTH_TYPES.has(t)) return `${t}(${String(length).trim()})`;
   return t;
 }
 

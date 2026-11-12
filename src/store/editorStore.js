@@ -467,6 +467,7 @@ export const useEditorStore = create((set, get) => ({
             id: `col-${Date.now()}`,
             name: 'new_column',
             type: 'VARCHAR',
+            length: '',
             pk: false,
             fk: false,
             notNull: false,

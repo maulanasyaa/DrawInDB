@@ -203,6 +203,55 @@ describe('sqlGenerator — Generic', () => {
   });
 });
 
+describe('sqlGenerator — length/limit tipe', () => {
+  const gen = (dbType, columns) => generateSQL({
+    meta: { db_type: dbType },
+    tables: [{ id: 't', data: { name: 't', columns } }],
+    relationships: [],
+  });
+
+  const col = (name, type, length) => ({
+    id: `t.${name}`, name, type, length,
+    pk: false, fk: false, notNull: false, unique: false,
+  });
+
+  it('MySQL: VARCHAR dengan length → VARCHAR(10)', () => {
+    const out = gen('mysql', [col('a', 'VARCHAR', '10')]);
+    expect(out).toContain('`a` VARCHAR(10)');
+  });
+
+  it('MySQL: DECIMAL dengan length → DECIMAL(10,2)', () => {
+    const out = gen('mysql', [col('b', 'DECIMAL', '10,2')]);
+    expect(out).toContain('`b` DECIMAL(10,2)');
+  });
+
+  it('Generic: VARCHAR tanpa length tetap default VARCHAR(255)', () => {
+    const out = gen('generic', [col('a', 'VARCHAR', '')]);
+    expect(out).toContain('a VARCHAR(255)');
+  });
+
+  it('Generic: CHAR dengan length → CHAR(5)', () => {
+    const out = gen('generic', [col('c', 'CHAR', '5')]);
+    expect(out).toContain('c CHAR(5)');
+  });
+
+  it('PostgreSQL: NUMERIC dengan length → NUMERIC(12,4)', () => {
+    const out = gen('postgresql', [col('d', 'NUMERIC', '12,4')]);
+    expect(out).toContain('"d" NUMERIC(12,4)');
+  });
+
+  it('SQLite: VARCHAR dengan length tetap dipetakan ke TEXT', () => {
+    const out = gen('sqlite', [col('a', 'VARCHAR', '10')]);
+    expect(out).toContain('a TEXT');
+  });
+
+  it('tipe non-length mengabaikan field length', () => {
+    const out = gen('generic', [col('e', 'INTEGER', '11')]);
+    expect(out).toContain('e INTEGER');
+    expect(out).not.toContain('(11)');
+  });
+});
+
 describe('sqlGenerator — FK inline & PK', () => {
   // Diperbaiki: `getSQLiteInlineFK` dulu membandingkan `r.target` dengan
   // `tableData.id` (undefined, karena `generateSQL` mengirim `table.data`),

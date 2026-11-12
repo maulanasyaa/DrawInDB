@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Handle, Position, useUpdateNodeInternals } from "reactflow";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEditorStore } from "../../store/editorStore";
-import { DB_DATA_TYPES } from "../../config/dbTypes";
+import { DB_DATA_TYPES, LENGTH_TYPES } from "../../config/dbTypes";
 import { FiMoreVertical, FiX } from "react-icons/fi";
 import { MdDragIndicator } from "react-icons/md";
 import { FaKey } from "react-icons/fa";
@@ -159,9 +159,11 @@ const TableNode = React.memo(({ id, data, selected }) => {
               <select
                 className="bg-transparent text-secondary text-[11px] w-20 appearance-none cursor-pointer outline-none font-mono tracking-tight font-medium"
                 value={col.type}
-                onChange={(e) =>
-                  updateColumn(id, col.id, { type: e.target.value })
-                }
+                onChange={(e) => {
+                  const payload = { type: e.target.value };
+                  if (!LENGTH_TYPES.has(e.target.value.toUpperCase())) payload.length = '';
+                  updateColumn(id, col.id, payload);
+                }}
               >
                 {availableTypes.map((t) => (
                   <option key={t} value={t} className="bg-surface">
@@ -170,6 +172,20 @@ const TableNode = React.memo(({ id, data, selected }) => {
                 ))}
               </select>
             </div>
+
+            {LENGTH_TYPES.has((col.type || '').toUpperCase()) && (
+              <div className="flex items-center bg-base/30 border border-theme/30 rounded px-1.5 py-1 focus-within:border-focus transition-colors">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  title="Limit / panjang tipe (mis. VARCHAR(10))"
+                  className="bg-transparent text-secondary text-[11px] w-14 outline-none font-mono tracking-tight font-medium placeholder:text-muted"
+                  value={col.length ?? ''}
+                  placeholder="10"
+                  onChange={(e) => updateColumn(id, col.id, { length: e.target.value })}
+                />
+              </div>
+            )}
 
             <button
               onClick={() => deleteColumn(id, col.id)}
