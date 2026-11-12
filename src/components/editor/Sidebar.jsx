@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { useEditorStore } from "../../store/editorStore";
-import { DB_DATA_TYPES } from "../../config/dbTypes";
+import { DB_DATA_TYPES, LENGTH_TYPES } from "../../config/dbTypes";
 import EmptyState from "../EmptyState";
 import {
   FiEye,
@@ -68,7 +68,7 @@ const SortableColumn = React.memo(({ col, tableId, availableTypes }) => {
       ref={setNodeRef}
       style={style}
       // Sesuaikan baris ini:
-      className={`grid grid-cols-[20px_1fr_75px_24px_24px_24px_24px] items-center gap-1 group p-0.5 rounded transition-colors ${isDragging ? "bg-hover opacity-80" : "hover:bg-hover"}`}
+      className={`grid grid-cols-[20px_1fr_75px_40px_24px_24px_24px_24px] items-center gap-1 group p-0.5 rounded transition-colors ${isDragging ? "bg-hover opacity-80" : "hover:bg-hover"}`}
     >
       <span
         {...attributes}
@@ -93,9 +93,11 @@ const SortableColumn = React.memo(({ col, tableId, availableTypes }) => {
         <select
           className="w-full bg-transparent text-[10px] text-accent outline-none cursor-pointer font-mono font-medium"
           value={col.type}
-          onChange={(e) =>
-            updateColumn(tableId, col.id, { type: e.target.value })
-          }
+          onChange={(e) => {
+            const payload = { type: e.target.value };
+            if (!LENGTH_TYPES.has(e.target.value.toUpperCase())) payload.length = '';
+            updateColumn(tableId, col.id, payload);
+          }}
         >
           {availableTypes.map((t) => (
             <option key={t} className="bg-surface">
@@ -103,6 +105,20 @@ const SortableColumn = React.memo(({ col, tableId, availableTypes }) => {
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="flex items-center bg-surface border border-theme rounded px-1 py-0.5 focus-within:border-focus transition-colors">
+        {LENGTH_TYPES.has((col.type || '').toUpperCase()) ? (
+          <input
+            type="text"
+            inputMode="numeric"
+            title="Limit / panjang tipe (mis. VARCHAR(10))"
+            className="w-full bg-transparent text-[10px] text-secondary outline-none font-mono font-medium placeholder:text-muted"
+            value={col.length ?? ''}
+            placeholder="10"
+            onChange={(e) => updateColumn(tableId, col.id, { length: e.target.value })}
+          />
+        ) : null}
       </div>
 
       <button
@@ -256,13 +272,16 @@ const SidebarTableRow = React.memo(({ table, isExpanded, onToggleExpand }) => {
                 </div>
 
                 {/* Grid Header */}
-                <div className="grid grid-cols-[20px_1fr_75px_24px_24px_24px_24px] gap-1 px-1 mb-1 border-b border-theme/30 pb-1">
+                <div className="grid grid-cols-[20px_1fr_75px_40px_24px_24px_24px_24px] gap-1 px-1 mb-1 border-b border-theme/30 pb-1">
                   <div />
                   <span className="text-[9px] font-bold text-muted/60 uppercase tracking-tighter">
                     Name
                   </span>
                   <span className="text-[9px] font-bold text-muted/60 uppercase tracking-tighter">
                     Type
+                  </span>
+                  <span className="text-[9px] font-bold text-muted/60 uppercase tracking-tighter text-center">
+                    Len
                   </span>
                   <span className="text-[9px] font-bold text-muted/60 uppercase tracking-tighter text-center">
                     PK

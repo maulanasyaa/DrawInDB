@@ -176,8 +176,8 @@ const TableNode = React.memo(({ id, data, selected }) => {
             {LENGTH_TYPES.has((col.type || '').toUpperCase()) && (
               <div className="flex items-center bg-base/30 border border-theme/30 rounded px-1.5 py-1 focus-within:border-focus transition-colors">
                 <input
-                  type="number"
-                  min="1"
+                  type="text"
+                  inputMode="numeric"
                   title="Limit / panjang tipe (mis. VARCHAR(10))"
                   className="bg-transparent text-secondary text-[11px] w-14 outline-none font-mono tracking-tight font-medium placeholder:text-muted"
                   value={col.length ?? ''}
