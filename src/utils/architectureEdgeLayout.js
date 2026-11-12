@@ -26,6 +26,9 @@ export const ARCH_HANDLE_INSET = 6;
 export const ARCH_MIN_STUB = 40;
 export const ARCH_MAX_STUB = 200;
 
+/** Jarak label dari garis (tegak lurus kurva) supaya tidak menutupi edge. */
+export const ARCH_LABEL_NORMAL_OFFSET = 14;
+
 const DIR = {
   left: { x: -1, y: 0 },
   right: { x: 1, y: 0 },
@@ -115,10 +118,16 @@ export function archEdgePath({
   const c2y = ty + tDir.y * stub + normal.y * offset;
 
   // Titik kubik t=0.5 — rumus yang sama dengan getBezierEdgeCenter React Flow.
+  // Label digeser tegak lurus menjauh dari garis supaya tidak menutupi edge,
+  // selalu ke arah `-normal` (di atas garis untuk edge arah kanan). Untuk
+  // pasangan A→B / B→A normalnya berlawanan sehingga label tetap terpisah.
+  const labelOffsetX = -normal.x * ARCH_LABEL_NORMAL_OFFSET;
+  const labelOffsetY = -normal.y * ARCH_LABEL_NORMAL_OFFSET;
+
   return {
     path: `M ${sx} ${sy} C ${c1x} ${c1y} ${c2x} ${c2y} ${tx} ${ty}`,
-    labelX: (sx + 3 * c1x + 3 * c2x + tx) / 8,
-    labelY: (sy + 3 * c1y + 3 * c2y + ty) / 8,
+    labelX: (sx + 3 * c1x + 3 * c2x + tx) / 8 + labelOffsetX,
+    labelY: (sy + 3 * c1y + 3 * c2y + ty) / 8 + labelOffsetY,
   };
 }
 
@@ -128,11 +137,11 @@ export function hasArchEdgeContent(data) {
 }
 
 /**
- * Label hanya digambar bila ada isi, atau saat edge dipilih/diedit
- * (placeholder). Edge kosong & tidak dipilih → tidak ada elemen sama sekali.
+ * Label selalu dirender (terlihat default) supaya mudah diklik untuk diedit.
+ * `isArchEdgePlaceholder` membedakan tampilan kosong (placeholder) vs berisi.
  */
-export function shouldRenderArchEdgeLabel({ data, selected, editing } = {}) {
-  return Boolean(editing || selected || hasArchEdgeContent(data));
+export function shouldRenderArchEdgeLabel() {
+  return true;
 }
 
 /** Placeholder: bukan label sebenarnya, tidak boleh ikut Export PNG. */

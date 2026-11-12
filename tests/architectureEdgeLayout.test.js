@@ -12,6 +12,7 @@ import {
   ARCH_HANDLE_INSET,
   ARCH_BOUNDARY_Z,
   ARCH_EDGE_Z,
+  ARCH_LABEL_NORMAL_OFFSET,
 } from '../src/utils/architectureEdgeLayout.js';
 const e = (id, source, target, sourceHandle = 'right', targetHandle = 'left') => ({
   id,
@@ -130,14 +131,19 @@ describe('archEdgePath', () => {
     expect(c1x).toBeGreaterThan(forward.sourceX - ARCH_HANDLE_INSET);
   });
 
-  it('label di titik kubik t=0.5 (sama dengan getBezierEdgeCenter)', () => {
+  it('label di titik kubik t=0.5 + offset normal (di atas garis)', () => {
     const [c1x, c1y, c2x, c2y] = controlsOf(archEdgePath(forward).path);
     const { labelX, labelY } = archEdgePath(forward);
     const sx = forward.sourceX - ARCH_HANDLE_INSET;
     const tx = forward.targetX + ARCH_HANDLE_INSET;
 
+    // forward: sourcePosition 'right' → normal (0, 1); offset 0 → side -1
+    // → hanya Y bergeser ke atas (minus).
     expect(labelX).toBe((sx + 3 * c1x + 3 * c2x + tx) / 8);
-    expect(labelY).toBe((forward.sourceY + 3 * c1y + 3 * c2y + forward.targetY) / 8);
+    expect(labelY).toBe(
+      (forward.sourceY + 3 * c1y + 3 * c2y + forward.targetY) / 8 -
+        ARCH_LABEL_NORMAL_OFFSET,
+    );
   });
 
   it('offset menggeser kurva & label, bukan ujungnya', () => {
@@ -176,10 +182,11 @@ describe('label & placeholder', () => {
     expect(hasArchEdgeContent(undefined)).toBe(false);
   });
 
-  it('edge kosong tidak dipilih → placeholder tidak dirender', () => {
+  it('label selalu dirender (default), placeholder untuk konten kosong', () => {
+    // Kosong & tak dipilih → tetap dirender, ditandai sebagai placeholder.
     expect(
       shouldRenderArchEdgeLabel({ data: { label: '', technology: '' }, selected: false }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isArchEdgePlaceholder({ data: { label: '', technology: '' }, editing: false }),
     ).toBe(true);
