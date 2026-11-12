@@ -91,8 +91,8 @@ export default function ArchitectureNode({ id, data, selected }) {
       isVisible={selected}
       minWidth={ARCH_MIN_SIZES[subtype].minWidth}
       minHeight={ARCH_MIN_SIZES[subtype].minHeight}
-      lineClassName="!border-transparent"
-      handleClassName="w-2 h-2 bg-canvas border border-accent rounded-sm !z-50"
+      lineClassName="!border-transparent !pointer-events-auto"
+      handleClassName="w-2 h-2 bg-canvas border border-accent rounded-sm !z-50 !pointer-events-auto"
     />
   ) : null;
 

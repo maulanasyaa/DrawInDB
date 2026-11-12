@@ -8,7 +8,7 @@ export const ARCH_NODE_TYPES = {
   BOUNDARY: 'boundary',
 };
 
-/** Subtype yang boleh di-resize (hanya boundary). */
+/** Hanya boundary yang boleh di-resize. */
 export const ARCH_RESIZABLE = { [ARCH_NODE_TYPES.BOUNDARY]: true };
 
 export const ARCH_DEFAULT_SIZES = {
