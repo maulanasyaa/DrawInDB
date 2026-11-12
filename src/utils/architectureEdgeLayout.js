@@ -118,13 +118,11 @@ export function archEdgePath({
   const c2y = ty + tDir.y * stub + normal.y * offset;
 
   // Titik kubik t=0.5 — rumus yang sama dengan getBezierEdgeCenter React Flow.
-  // Label digeser tegak lurus menjauh dari garis supaya tidak menutupi edge.
-  // Arahnya mengikuti tanda `offset` paralel: label duduk di sisi luar kurva
-  // (untuk edge paralel yang membusur ke arah `normal`, label ikut keluar).
-  // Saat `offset === 0` (edge tunggal), pakai `+normal` sebagai default.
-  const side = offset === 0 ? 1 : Math.sign(offset);
-  const labelOffsetX = normal.x * side * ARCH_LABEL_NORMAL_OFFSET;
-  const labelOffsetY = normal.y * side * ARCH_LABEL_NORMAL_OFFSET;
+  // Label digeser tegak lurus menjauh dari garis supaya tidak menutupi edge,
+  // selalu ke arah `-normal` (di atas garis untuk edge arah kanan). Untuk
+  // pasangan A→B / B→A normalnya berlawanan sehingga label tetap terpisah.
+  const labelOffsetX = -normal.x * ARCH_LABEL_NORMAL_OFFSET;
+  const labelOffsetY = -normal.y * ARCH_LABEL_NORMAL_OFFSET;
 
   return {
     path: `M ${sx} ${sy} C ${c1x} ${c1y} ${c2x} ${c2y} ${tx} ${ty}`,
@@ -139,11 +137,11 @@ export function hasArchEdgeContent(data) {
 }
 
 /**
- * Label hanya digambar bila ada isi, atau saat edge dipilih/diedit
- * (placeholder). Edge kosong & tidak dipilih → tidak ada elemen sama sekali.
+ * Label selalu dirender (terlihat default) supaya mudah diklik untuk diedit.
+ * `isArchEdgePlaceholder` membedakan tampilan kosong (placeholder) vs berisi.
  */
-export function shouldRenderArchEdgeLabel({ data, selected, editing } = {}) {
-  return Boolean(editing || selected || hasArchEdgeContent(data));
+export function shouldRenderArchEdgeLabel() {
+  return true;
 }
 
 /** Placeholder: bukan label sebenarnya, tidak boleh ikut Export PNG. */
