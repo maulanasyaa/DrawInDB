@@ -8,14 +8,8 @@ export const ARCH_NODE_TYPES = {
   BOUNDARY: 'boundary',
 };
 
-/** Semua subtype boleh di-resize. */
-export const ARCH_RESIZABLE = {
-  [ARCH_NODE_TYPES.PERSON]: true,
-  [ARCH_NODE_TYPES.SYSTEM]: true,
-  [ARCH_NODE_TYPES.CONTAINER]: true,
-  [ARCH_NODE_TYPES.DATABASE]: true,
-  [ARCH_NODE_TYPES.BOUNDARY]: true,
-};
+/** Hanya boundary yang boleh di-resize. */
+export const ARCH_RESIZABLE = { [ARCH_NODE_TYPES.BOUNDARY]: true };
 
 export const ARCH_DEFAULT_SIZES = {
   [ARCH_NODE_TYPES.PERSON]: { width: 120, height: 150 },
@@ -108,10 +102,6 @@ export const ARCH_DEFAULT_FIELDS = {
 };
 
 export const ARCH_MIN_SIZES = {
-  [ARCH_NODE_TYPES.PERSON]: { minWidth: 120, minHeight: 150 },
-  [ARCH_NODE_TYPES.SYSTEM]: { minWidth: 200, minHeight: 100 },
-  [ARCH_NODE_TYPES.CONTAINER]: { minWidth: 220, minHeight: 120 },
-  [ARCH_NODE_TYPES.DATABASE]: { minWidth: 180, minHeight: 110 },
   [ARCH_NODE_TYPES.BOUNDARY]: { minWidth: 240, minHeight: 180 },
 };
 

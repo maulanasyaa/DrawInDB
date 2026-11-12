@@ -100,7 +100,6 @@ export default function ArchitectureNode({ id, data, selected }) {
   if (subtype === ARCH_NODE_TYPES.PERSON) {
     return (
       <div className="w-full h-full relative group flex flex-col items-center">
-        {resizer}
         <div className="relative shrink-0" style={shape}>
           <NodeHandles anchors={anchors} />
 
@@ -172,7 +171,6 @@ export default function ArchitectureNode({ id, data, selected }) {
   if (subtype === ARCH_NODE_TYPES.DATABASE) {
     return (
       <div className="w-full h-full relative group flex flex-col items-center justify-center gap-1">
-        {resizer}
         <div className="relative shrink-0" style={shape}>
           <NodeHandles anchors={anchors} />
 
