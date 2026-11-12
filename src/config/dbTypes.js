@@ -24,3 +24,9 @@ export const DB_DATA_TYPES = {
     "BOOLEAN", "JSON", "BLOB", "ENUM"
   ]
 };
+
+/**
+ * Tipe yang menerima argumen ukuran/limit (mis. VARCHAR(10), DECIMAL(10,2)).
+ * ENUM sengaja tidak masuk karena argumennya daftar nilai, bukan angka.
+ */
+export const LENGTH_TYPES = new Set(['VARCHAR', 'CHAR', 'DECIMAL', 'NUMERIC']);
