@@ -91,8 +91,8 @@ export default function ArchitectureNode({ id, data, selected }) {
       isVisible={selected}
       minWidth={ARCH_MIN_SIZES[subtype].minWidth}
       minHeight={ARCH_MIN_SIZES[subtype].minHeight}
-      lineClassName="!border-transparent"
-      handleClassName="w-2 h-2 bg-canvas border border-accent rounded-sm !z-50"
+      lineClassName="!border-transparent !pointer-events-auto"
+      handleClassName="w-2 h-2 bg-canvas border border-accent rounded-sm !z-50 !pointer-events-auto"
     />
   ) : null;
 
@@ -100,6 +100,7 @@ export default function ArchitectureNode({ id, data, selected }) {
   if (subtype === ARCH_NODE_TYPES.PERSON) {
     return (
       <div className="w-full h-full relative group flex flex-col items-center">
+        {resizer}
         <div className="relative shrink-0" style={shape}>
           <NodeHandles anchors={anchors} />
 
@@ -171,6 +172,7 @@ export default function ArchitectureNode({ id, data, selected }) {
   if (subtype === ARCH_NODE_TYPES.DATABASE) {
     return (
       <div className="w-full h-full relative group flex flex-col items-center justify-center gap-1">
+        {resizer}
         <div className="relative shrink-0" style={shape}>
           <NodeHandles anchors={anchors} />
 
