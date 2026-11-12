@@ -26,6 +26,9 @@ export const ARCH_HANDLE_INSET = 6;
 export const ARCH_MIN_STUB = 40;
 export const ARCH_MAX_STUB = 200;
 
+/** Jarak label dari garis (tegak lurus kurva) supaya tidak menutupi edge. */
+export const ARCH_LABEL_NORMAL_OFFSET = 14;
+
 const DIR = {
   left: { x: -1, y: 0 },
   right: { x: 1, y: 0 },
@@ -115,10 +118,18 @@ export function archEdgePath({
   const c2y = ty + tDir.y * stub + normal.y * offset;
 
   // Titik kubik t=0.5 — rumus yang sama dengan getBezierEdgeCenter React Flow.
+  // Label digeser tegak lurus menjauh dari garis supaya tidak menutupi edge.
+  // Arahnya mengikuti tanda `offset` paralel: label duduk di sisi luar kurva
+  // (untuk edge paralel yang membusur ke arah `normal`, label ikut keluar).
+  // Saat `offset === 0` (edge tunggal), pakai `+normal` sebagai default.
+  const side = offset === 0 ? 1 : Math.sign(offset);
+  const labelOffsetX = normal.x * side * ARCH_LABEL_NORMAL_OFFSET;
+  const labelOffsetY = normal.y * side * ARCH_LABEL_NORMAL_OFFSET;
+
   return {
     path: `M ${sx} ${sy} C ${c1x} ${c1y} ${c2x} ${c2y} ${tx} ${ty}`,
-    labelX: (sx + 3 * c1x + 3 * c2x + tx) / 8,
-    labelY: (sy + 3 * c1y + 3 * c2y + ty) / 8,
+    labelX: (sx + 3 * c1x + 3 * c2x + tx) / 8 + labelOffsetX,
+    labelY: (sy + 3 * c1y + 3 * c2y + ty) / 8 + labelOffsetY,
   };
 }
 
