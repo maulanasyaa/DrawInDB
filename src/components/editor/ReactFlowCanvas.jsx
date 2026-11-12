@@ -101,7 +101,7 @@ export default function ReactFlowCanvas({ editorConfig }) {
         className="bg-canvas"
       >
         <Background color="var(--dot-color)" gap={24} size={1} />
-        <Controls className="!bg-surface !border-theme !fill-primary !text-primary shadow-lg" />
+        <Controls className="shadow-lg" />
         {minimapEnabled && (
           <MiniMap
             nodeColor="var(--text-muted)"

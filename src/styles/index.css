@@ -354,3 +354,27 @@ button, input, select, a, .interactive {
 .react-flow__attribution {
   display: none !important;
 }
+
+/* React Flow Controls — theme-aware (terlihat di light & dark) */
+.react-flow__controls {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+}
+.react-flow__controls-button {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+}
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+.react-flow__controls-button:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+.react-flow__controls-button svg {
+  fill: currentColor !important;
+}
