@@ -21,6 +21,7 @@ import { buildOpenApiExport } from "../../utils/openapiExport";
 import { getDiagramType, isErdType } from "../../config/diagramTypes";
 import { getEditorConfig } from "../../config/editorTypes.jsx";
 import BackButton from "../BackButton";
+import SidebarToggle from "./SidebarToggle";
 
 export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPreview }) {
   const navigate = useNavigate();
@@ -172,6 +173,8 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
                 {diagramMeta.db_type}
               </span>
             )}
+
+            <SidebarToggle />
           </div>
         </div>
       </div>

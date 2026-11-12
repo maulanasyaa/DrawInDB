@@ -20,7 +20,6 @@ import { CSS } from "@dnd-kit/utilities";
 
 import { useEditorStore } from "../../store/editorStore";
 import { DB_DATA_TYPES, LENGTH_TYPES } from "../../config/dbTypes";
-import SidebarToggle from "./SidebarToggle";
 import EmptyState from "../EmptyState";
 import {
   FiEye,
@@ -392,7 +391,6 @@ export default function Sidebar() {
             <span className="text-xs bg-base border border-theme text-secondary px-2 py-0.5 rounded-full font-medium">
               {tables.length}
             </span>
-            <SidebarToggle />
           </div>
 
           <div className="flex-1 overflow-y-auto flex flex-col bg-base pb-24">

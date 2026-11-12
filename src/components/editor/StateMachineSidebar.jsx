@@ -2,7 +2,6 @@ import React from "react";
 import { motion } from "framer-motion";
 import { useReactFlow } from "reactflow";
 import { useEditorStore } from "../../store/editorStore";
-import SidebarToggle from './SidebarToggle';
 import { SM_SHAPES, SM_NODE_TYPES } from "../../config/stateMachineTypes";
 
 /** Ikon palet: bentuk mini yang meniru node aslinya (theme-aware via currentColor). */
@@ -59,7 +58,6 @@ export default function StateMachineSidebar() {
         <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.2em]">
           State Elements
         </h2>
-        <SidebarToggle />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">

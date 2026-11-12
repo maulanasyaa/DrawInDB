@@ -20,7 +20,7 @@ export default function SidebarToggle() {
       aria-pressed={isSidebarOpen}
       title="Toggle Sidebar (Ctrl/Cmd+B)"
       aria-label="Toggle Sidebar"
-      className="flex items-center justify-center w-7 h-7 rounded-md text-muted hover:text-primary hover:bg-surface-2 transition-colors"
+      className="flex items-center justify-center w-7 h-7 rounded-md text-muted hover:text-primary hover:bg-surface-2 active:scale-90 active:bg-surface-2 active:text-primary transition-all"
     >
       <Icon size={15} />
     </button>
