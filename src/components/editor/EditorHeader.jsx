@@ -11,8 +11,6 @@ import {
   FiCornerUpRight,
   FiCode,
   FiNavigation,
-  FiChevronLeft,
-  FiChevronRight,
 } from "react-icons/fi";
 import {
   buildUseCaseExport,
@@ -33,8 +31,6 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
   const diagramMeta = useEditorStore((state) => state.diagramMeta);
   const isDirty = useEditorStore((state) => state.isDirty);
   const saveDiagram = useEditorStore((state) => state.saveDiagram);
-  const isSidebarOpen = useEditorStore((state) => state.isSidebarOpen);
-  const toggleSidebar = useEditorStore((state) => state.toggleSidebar);
   const tables = useEditorStore((state) => state.tables);
   const nodes = useEditorStore((state) => state.nodes);
   const flowEdges = useEditorStore((state) => state.flowEdges);
@@ -56,7 +52,6 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
   const type = diagramMeta.type;
   const typeConfig = getDiagramType(type);
   const editorConfig = getEditorConfig(type);
-  const hasSidebar = !!editorConfig.sidebar;
   const isERD = isErdType(type);
   const badgeText = typeConfig.badge;
   const backLabel = typeConfig.backLabel;
@@ -182,26 +177,6 @@ export default function EditorHeader({ sqlPreviewOpen = false, onToggleSqlPrevie
       </div>
 
       <div className="flex items-center gap-3">
-        {hasSidebar && (
-          <button
-            onClick={toggleSidebar}
-            aria-pressed={isSidebarOpen}
-            className={`p-1.5 rounded-md transition-colors ${
-              isSidebarOpen
-                ? "text-primary bg-surface-2"
-                : "text-muted hover:text-primary hover:bg-surface-2"
-            }`}
-            title="Toggle Sidebar (Ctrl/Cmd+B)"
-            aria-label="Toggle Sidebar"
-          >
-            {isSidebarOpen ? (
-              <FiChevronLeft className="text-sm" />
-            ) : (
-              <FiChevronRight className="text-sm" />
-            )}
-          </button>
-        )}
-
         <div className="flex items-center gap-1">
           <button
             onClick={undo}

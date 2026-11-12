@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ReactFlowProvider } from "reactflow";
 import "reactflow/dist/style.css";
 import { AnimatePresence } from "framer-motion";
-import { FiChevronRight } from "react-icons/fi";
 
 import { useVaultStore } from "../store/vaultStore";
 import { useEditorStore } from "../store/editorStore";
@@ -28,7 +27,6 @@ function EditorContent() {
   const isLoading = useEditorStore((state) => state.isLoading);
   const diagramMeta = useEditorStore((state) => state.diagramMeta);
   const isSidebarOpen = useEditorStore((state) => state.isSidebarOpen);
-  const toggleSidebar = useEditorStore((state) => state.toggleSidebar);
 
   // Panel preview SQL: murni UI, bukan state store — tidak masuk history/dirty.
   const [sqlPreviewOpen, setSqlPreviewOpen] = useState(false);
@@ -89,17 +87,6 @@ function EditorContent() {
 
       <div className="flex-1 min-h-0 relative flex">
         {renderSidebar()}
-
-        {!isSidebarOpen && EditorSidebar && (
-          <button
-            onClick={toggleSidebar}
-            title="Show Sidebar"
-            aria-label="Show Sidebar"
-            className="absolute left-2 top-1/2 -translate-y-1/2 z-30 w-8 h-12 bg-surface border border-theme rounded-r-lg shadow-lg flex items-center justify-center text-muted hover:text-primary hover:bg-surface-2 transition-colors"
-          >
-            <FiChevronRight />
-          </button>
-        )}
 
         {EditorOverlay && <EditorOverlay />}
 

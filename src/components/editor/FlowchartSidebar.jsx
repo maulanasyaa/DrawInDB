@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { useReactFlow } from "reactflow";
 import { useEditorStore } from "../../store/editorStore";
+import SidebarToggle from './SidebarToggle';
 import {
   LuCircle,
   LuSquare,
@@ -132,6 +133,7 @@ export default function FlowchartSidebar() {
         <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.2em]">
           Shapes Library
         </h2>
+        <SidebarToggle />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">

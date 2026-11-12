@@ -8,6 +8,7 @@ import {
   FiCornerDownRight,
 } from 'react-icons/fi';
 import { useEditorStore } from '../../store/editorStore';
+import SidebarToggle from './SidebarToggle';
 import {
   SQ_PARTICIPANT_KINDS,
   SQ_MESSAGE_KINDS,
@@ -112,6 +113,7 @@ export default function SequenceSidebar() {
           />
           Numbers
         </label>
+        <SidebarToggle />
       </div>
 
       <div ref={bodyRef} className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-6">
